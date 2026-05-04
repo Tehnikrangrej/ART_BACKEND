@@ -152,7 +152,7 @@ const loginUser = asyncHandler(async (req, res) => {
 const verifyOTP = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
 
-  const user = await prisma.user.findUnique({ 
+  const user = await prisma.user.findUnique({
     where: { email },
     include: { otps: true }
   });
@@ -192,8 +192,8 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: isNewlyVerified 
-      ? 'Email verified successfully. Your account is ready.' 
+    message: isNewlyVerified
+      ? 'Email verified successfully. Your account is ready.'
       : 'OTP verified successfully. Logged in successfully.',
     data: {
       id: user.id,
