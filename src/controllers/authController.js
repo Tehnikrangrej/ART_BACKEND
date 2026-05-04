@@ -14,7 +14,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // Validation
   if (!email || !password) {
     res.status(400);
-    throw new Error('Validation failed.');
+    throw new Error('Please provide both email and password.');
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -84,7 +84,7 @@ const registerUser = asyncHandler(async (req, res) => {
   } catch (err) {
     console.error('Email sending failed:', err.message);
     res.status(500);
-    throw new Error('Something went wrong. Please try again later.');
+    throw new Error('Unable to send verification email. Please try again later.');
   }
 });
 
@@ -139,11 +139,11 @@ const loginUser = asyncHandler(async (req, res) => {
     } catch (err) {
       console.error('Email sending failed:', err.message);
       res.status(500);
-      throw new Error('Something went wrong. Please try again later.');
+      throw new Error('Unable to send login OTP. Please try again later.');
     }
   } else {
     res.status(401);
-    throw new Error('Invalid email or password.');
+    throw new Error('Invalid email or password. Please check your credentials and try again.');
   }
 });
 
@@ -159,7 +159,7 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
   if (!user) {
     res.status(404);
-    throw new Error('Invalid email or password.');
+    throw new Error('Account not found with the provided email.');
   }
 
   const foundOtp = await prisma.oTP.findFirst({
@@ -223,16 +223,60 @@ const toggle2FA = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = {
-  registerUser,
-  loginUser,
-  verifyOTP,
-  toggle2FA,
-};
+// @desc    Resend OTP
+// @route   POST /api/auth/resend-otp
+const resendOTP = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400);
+    throw new Error('Please provide an email address.');
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Account not found with the provided email.');
+  }
+
+  // Delete any existing OTPs for this user (effectively "expiring" them)
+  await prisma.oTP.deleteMany({
+    where: { userId: user.id }
+  });
+
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+  await prisma.oTP.create({
+    data: { userId: user.id, otp, expiresAt },
+  });
+
+  console.log(`[TESTING] Resent OTP for ${user.email}: ${otp}`);
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'Your New Verification OTP',
+      message: `Your new OTP code is: ${otp}`,
+      html: otpTemplate(otp),
+    });
+
+    res.json({
+      success: true,
+      message: 'A new OTP has been sent to your email.',
+    });
+  } catch (err) {
+    console.error('Email sending failed:', err.message);
+    res.status(500);
+    throw new Error('Unable to send the new OTP. Please try again later.');
+  }
+});
 
 module.exports = {
   registerUser,
   loginUser,
   verifyOTP,
   toggle2FA,
+  resendOTP,
 };

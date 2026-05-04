@@ -9,12 +9,17 @@ const notFound = (req, res, next) => {
 const errorHandler = (err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   
-  res.status(statusCode).json({
+  const errorResponse = {
     success: false,
-    message: err.message,
-    // Only show stack trace in development mode
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-  });
+    message: err.message || 'Internal Server Error',
+  };
+
+  // Only show stack trace in non-production environments
+  if (process.env.NODE_ENV !== 'production') {
+    errorResponse.stack = err.stack;
+  }
+
+  res.status(statusCode).json(errorResponse);
 };
 
 // Wrapper to eliminate try/catch blocks in controllers
