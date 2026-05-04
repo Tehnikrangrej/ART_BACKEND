@@ -273,10 +273,20 @@ const resendOTP = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Check if user is logged in
+// @route   GET /api/auth/am-i-login
+const amILogin = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: req.user,
+  });
+});
+
 module.exports = {
   registerUser,
   loginUser,
   verifyOTP,
   toggle2FA,
   resendOTP,
+  amILogin,
 };
