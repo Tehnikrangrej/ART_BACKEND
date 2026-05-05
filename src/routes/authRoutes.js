@@ -7,7 +7,7 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/verify-otp', verifyOTP);
 router.post('/resend-otp', resendOTP);
-router.get('/is-loggedin', protect, amILogin);
+router.get('/is-logged-in', protect, amILogin);
 router.put('/toggle-2fa', protect, toggle2FA);
 
 module.exports = router;

@@ -14,11 +14,6 @@ const errorHandler = (err, req, res, next) => {
     message: err.message || 'Internal Server Error',
   };
 
-  // Only show stack trace in non-production environments
-  if (process.env.NODE_ENV !== 'production') {
-    errorResponse.stack = err.stack;
-  }
-
   res.status(statusCode).json(errorResponse);
 };
 
