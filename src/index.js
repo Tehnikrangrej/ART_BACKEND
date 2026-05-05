@@ -4,6 +4,8 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const artWorkRoutes = require('./routes/ArtWorkRoutes');
 const searchRoutes = require('./routes/SearchRoutes');
+const permissionRoutes = require('./routes/PermissionRoutes');
+
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
 
 dotenv.config();
@@ -18,6 +20,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/artworks', artWorkRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/permissions', permissionRoutes);
+
 
 app.get('/', (req, res) => {
   res.send('API is running...');
@@ -29,6 +33,8 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running at: http://localhost:${PORT}`);
 });
+
+

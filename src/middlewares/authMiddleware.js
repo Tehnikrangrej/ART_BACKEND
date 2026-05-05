@@ -11,7 +11,7 @@ const protect = async (req, res, next) => {
 
       req.user = await prisma.user.findUnique({
         where: { id: decoded.id },
-        select: { id: true, name: true, email: true, twoFactorAuth: true }
+        select: { id: true, name: true, email: true, role: true, twoFactorAuth: true }
       });
 
       next();
@@ -27,4 +27,16 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+const admin = (req, res, next) => {
+  if (req.user && req.user.role === 'ADMINISTRATOR') {
+    next();
+  } else {
+    res.status(403);
+    throw new Error('Not authorized as an administrator.');
+  }
+};
+
+module.exports = { protect, admin };
+
+
+

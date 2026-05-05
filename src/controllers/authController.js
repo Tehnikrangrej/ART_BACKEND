@@ -38,15 +38,20 @@ const registerUser = asyncHandler(async (req, res) => {
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
+  const userCount = await prisma.user.count();
+  const role = userCount === 0 ? 'ADMINISTRATOR' : 'CLIENT';
+
   const user = await prisma.user.create({
     data: {
       name,
       email,
       password: hashedPassword,
+      role,
       twoFactorAuth: twoFactorAuth !== undefined ? twoFactorAuth : true,
       isVerified: twoFactorAuth === false ? true : false,
     },
   });
+
 
   if (user.twoFactorAuth === false) {
     return res.status(201).json({
@@ -111,7 +116,9 @@ const loginUser = asyncHandler(async (req, res) => {
           id: user.id,
           name: user.name,
           email: user.email,
+          role: user.role,
           token: generateToken(user.id),
+
         },
       });
     }
@@ -199,7 +206,9 @@ const verifyOTP = asyncHandler(async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role,
       token: generateToken(user.id),
+
     },
   });
 });
@@ -282,6 +291,42 @@ const amILogin = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Update user role (Admin only)
+// @route   PUT /api/auth/user/:id/role
+const updateUserRole = asyncHandler(async (req, res) => {
+  const { role } = req.body;
+  const { id } = req.params;
+
+  const validRoles = ['CLIENT', 'CLIENT_REPRESENTATIVE', 'ADMINISTRATOR'];
+  if (!validRoles.includes(role)) {
+    res.status(400);
+    throw new Error('Invalid role specified.');
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found.');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id },
+    data: { role },
+  });
+
+  res.json({
+    success: true,
+    message: `User role updated to ${role} successfully.`,
+    data: {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+    },
+  });
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -289,4 +334,6 @@ module.exports = {
   toggle2FA,
   resendOTP,
   amILogin,
+  updateUserRole,
 };
+

@@ -12,17 +12,44 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  CLIENT
+  CLIENT_REPRESENTATIVE
+  ADMINISTRATOR
+}
+
 model User {
   id         String   @id @default(uuid())
   email      String   @unique
   password   String
   name       String?
+  role       Role     @default(CLIENT)
   isVerified    Boolean  @default(false)
   twoFactorAuth Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   otps          OTP[]
 }
+
+model Permission {
+  id        String           @id @default(uuid())
+  name      String           @unique // e.g., READ_ARTWORK
+  action    String           // e.g., READ
+  resource  String           // e.g., ARTWORK
+  roles     RolePermission[]
+  createdAt DateTime         @default(now())
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+}
+
+
 
 model OTP {
   id        String   @id @default(uuid())
