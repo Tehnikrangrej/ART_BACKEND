@@ -28,8 +28,11 @@ model User {
   twoFactorAuth Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  otps          OTP[]
+  otps              OTP[]
+  enquiries         Enquiry[]
+  assignedEnquiries Enquiry[] @relation("AssignedEnquiries")
 }
+
 
 model Permission {
   id        String           @id @default(uuid())
@@ -74,5 +77,37 @@ model ArtWork{
   Pictures String[]
   price Float
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
+  enquiries Enquiry[]
+}
+
+enum EnquiryStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Enquiry {
+  id         String        @id @default(uuid())
+  artworkId  String
+  artwork    ArtWork       @relation(fields: [artworkId], references: [id])
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  message    String
+  status     EnquiryStatus @default(PENDING)
+  assignedTo String?
+  assignee   User?         @relation("AssignedEnquiries", fields: [assignedTo], references: [id])
+  history    EnquiryHistory[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model EnquiryHistory {
+  id        String   @id @default(uuid())
+  enquiryId String
+  enquiry   Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  action    String   // e.g., "Status changed to RESOLVED"
+  doneBy    String   // Name or ID of the person who made the change
+  createdAt DateTime @default(now())
 }

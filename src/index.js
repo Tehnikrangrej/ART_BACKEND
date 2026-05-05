@@ -5,8 +5,10 @@ const authRoutes = require('./routes/authRoutes');
 const artWorkRoutes = require('./routes/ArtWorkRoutes');
 const searchRoutes = require('./routes/SearchRoutes');
 const permissionRoutes = require('./routes/PermissionRoutes');
+const enquiryRoutes = require('./routes/EnquiryRoutes');
 
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
+const generatePermissions = require('./utils/permissionGenerator');
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/artworks', artWorkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/permissions', permissionRoutes);
+app.use('/api/enquiries', enquiryRoutes);
+
 
 
 app.get('/', (req, res) => {
@@ -35,6 +39,8 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, async () => {
   console.log(`Server running at: http://localhost:${PORT}`);
+  // Synchronize permissions with the database
+  await generatePermissions(app);
 });
 
 
