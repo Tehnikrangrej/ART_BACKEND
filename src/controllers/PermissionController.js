@@ -61,12 +61,12 @@ const deletePermission = asyncHandler(async (req, res) => {
 // @desc    Assign permission to a role
 // @route   POST /api/permissions/assign
 const assignPermissionToRole = asyncHandler(async (req, res) => {
-  const { role, permissionId } = req.body;
+  const { roleId, permissionId } = req.body;
 
-  const validRoles = ['CLIENT', 'CLIENT_REPRESENTATIVE', 'ADMINISTRATOR'];
-  if (!validRoles.includes(role)) {
-    res.status(400);
-    throw new Error('Invalid role.');
+  const role = await prisma.role.findUnique({ where: { id: roleId } });
+  if (!role) {
+    res.status(404);
+    throw new Error('Role not found.');
   }
 
   const permission = await prisma.permission.findUnique({ where: { id: permissionId } });
@@ -77,21 +77,21 @@ const assignPermissionToRole = asyncHandler(async (req, res) => {
 
   const rolePermission = await prisma.rolePermission.upsert({
     where: {
-      role_permissionId: {
-        role,
+      roleId_permissionId: {
+        roleId,
         permissionId
       }
     },
     update: {},
     create: {
-      role,
+      roleId,
       permissionId
     }
   });
 
   res.json({
     success: true,
-    message: `Permission ${permission.name} assigned to role ${role}.`,
+    message: `Permission ${permission.name} assigned to role ${role.name}.`,
     data: rolePermission
   });
 });
@@ -99,12 +99,12 @@ const assignPermissionToRole = asyncHandler(async (req, res) => {
 // @desc    Remove permission from a role
 // @route   DELETE /api/permissions/revoke
 const revokePermissionFromRole = asyncHandler(async (req, res) => {
-  const { role, permissionId } = req.body;
+  const { roleId, permissionId } = req.body;
 
   await prisma.rolePermission.delete({
     where: {
-      role_permissionId: {
-        role,
+      roleId_permissionId: {
+        roleId,
         permissionId
       }
     }

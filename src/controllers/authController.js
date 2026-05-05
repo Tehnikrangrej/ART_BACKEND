@@ -39,14 +39,19 @@ const registerUser = asyncHandler(async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, salt);
 
   const userCount = await prisma.user.count();
-  const role = userCount === 0 ? 'ADMINISTRATOR' : 'CLIENT';
+  const roleName = userCount === 0 ? 'ADMINISTRATOR' : 'CLIENT';
 
   const user = await prisma.user.create({
     data: {
       name,
       email,
       password: hashedPassword,
-      role,
+      role: {
+        connectOrCreate: {
+          where: { name: roleName },
+          create: { name: roleName }
+        }
+      },
       twoFactorAuth: twoFactorAuth !== undefined ? twoFactorAuth : true,
       isVerified: twoFactorAuth === false ? true : false,
     },
@@ -287,39 +292,19 @@ const amILogin = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Update user role (Admin only)
-// @route   PUT /api/auth/user/:id/role
-const updateUserRole = asyncHandler(async (req, res) => {
-  const { role } = req.body;
-  const { id } = req.params;
 
-  const validRoles = ['CLIENT', 'CLIENT_REPRESENTATIVE', 'ADMINISTRATOR'];
-  if (!validRoles.includes(role)) {
-    res.status(400);
-    throw new Error('Invalid role specified.');
-  }
 
-  const user = await prisma.user.findUnique({ where: { id } });
-
-  if (!user) {
-    res.status(404);
-    throw new Error('User not found.');
-  }
-
-  const updatedUser = await prisma.user.update({
-    where: { id },
-    data: { role },
+// @desc    Get all users (Admin only)
+// @route   GET /api/auth/users
+const getAllUsers = asyncHandler(async (req, res) => {
+  const users = await prisma.user.findMany({
+    include: { role: true },
+    orderBy: { createdAt: 'desc' }
   });
 
   res.json({
     success: true,
-    message: `User role updated to ${role} successfully.`,
-    data: {
-      id: updatedUser.id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      role: updatedUser.role,
-    },
+    data: users
   });
 });
 
@@ -330,6 +315,6 @@ module.exports = {
   toggle2FA,
   resendOTP,
   amILogin,
-  updateUserRole,
+  getAllUsers,
 };
 

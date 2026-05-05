@@ -6,6 +6,7 @@ const artWorkRoutes = require('./routes/ArtWorkRoutes');
 const searchRoutes = require('./routes/SearchRoutes');
 const permissionRoutes = require('./routes/PermissionRoutes');
 const enquiryRoutes = require('./routes/EnquiryRoutes');
+const roleRoutes = require('./routes/RoleRoutes');
 
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
 const generatePermissions = require('./utils/permissionGenerator');
@@ -24,6 +25,7 @@ app.use('/api/artworks', artWorkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/api/roles', roleRoutes);
 
 
 

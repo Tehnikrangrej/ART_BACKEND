@@ -13,7 +13,7 @@ const checkPermission = (requiredPermission) => {
     }
 
     // Administrators bypass all permission checks
-    if (req.user.role === 'ADMINISTRATOR') {
+    if (req.user.role && req.user.role.name === 'ADMINISTRATOR') {
       return next();
     }
 
@@ -41,7 +41,7 @@ const checkPermission = (requiredPermission) => {
     // Check if the user's role has this permission in the database
     const hasPermission = await prisma.rolePermission.findFirst({
       where: {
-        role: req.user.role,
+        roleId: req.user.roleId,
         permission: {
           name: permissionName
         }
