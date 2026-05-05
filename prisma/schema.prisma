@@ -34,3 +34,18 @@ model OTP {
 
   @@index([userId])
 }
+
+model ArtWork{
+  id String  @id @default(uuid())
+  artist String
+  title String
+  year DateTime
+  medium String
+  dimensions String
+  provenance String
+  location String
+  Pictures String[]
+  price Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
