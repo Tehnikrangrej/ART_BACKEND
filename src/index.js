@@ -9,6 +9,8 @@ const authRoutes = require('./routes/authRoutes');
 const artWorkRoutes = require('./routes/ArtWorkRoutes');
 const enquiryRoutes = require('./routes/EnquiryRoutes');
 const representativeRoutes = require('./routes/representativeRoutes');
+const shareLinkRoutes = require('./routes/shareLinkRoutes');
+const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
@@ -20,11 +22,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Initialize background jobs
+initCronJobs();
+
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/artworks', artWorkRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/representatives', representativeRoutes);
+app.use('/api/share-links', shareLinkRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {

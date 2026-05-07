@@ -63,6 +63,8 @@ model User {
   artworkAccess          ArtWorkAccess[]
   representativeRequests RepresentativeRequest[] @relation("ClientRequests")
   reviewedRequests       RepresentativeRequest[] @relation("ReviewedRequests")
+  shareLinks             ArtworkShareLink[] @relation("CreatedShareLinks")
+  receivedShareLinks     ArtworkShareLink[] @relation("SharedWithRecipients")
 }
 
 // ============================================================
@@ -102,6 +104,7 @@ model ArtWork {
   // Access control junction
   userAccess ArtWorkAccess[]
   enquiries  Enquiry[]
+  shareLinks ArtworkShareLink[]
 }
 
 // ============================================================
@@ -179,4 +182,24 @@ model RepresentativeRequest {
 
   @@index([clientId])
   @@index([status])
+}
+
+// ============================================================
+// ARTWORK SHARE LINK
+// ============================================================
+
+model ArtworkShareLink {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation("CreatedShareLinks", fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  // Many-to-many relation directly with ArtWork
+  artworks    ArtWork[]
+  
+  // Many-to-many relation for recipients
+  sharedWith  User[]    @relation("SharedWithRecipients")
 }
