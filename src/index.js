@@ -1,48 +1,48 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const authRoutes = require('./routes/authRoutes');
-const artWorkRoutes = require('./routes/ArtWorkRoutes');
-const searchRoutes = require('./routes/SearchRoutes');
-const permissionRoutes = require('./routes/PermissionRoutes');
-const enquiryRoutes = require('./routes/EnquiryRoutes');
-const roleRoutes = require('./routes/RoleRoutes');
-
-const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
-const generatePermissions = require('./utils/permissionGenerator');
 
 dotenv.config();
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
+const authRoutes = require('./routes/authRoutes');
+const artWorkRoutes = require('./routes/ArtWorkRoutes');
+const enquiryRoutes = require('./routes/EnquiryRoutes');
+const representativeRoutes = require('./routes/representativeRoutes');
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
+const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+// ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/artworks', artWorkRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/permissions', permissionRoutes);
 app.use('/api/enquiries', enquiryRoutes);
-app.use('/api/roles', roleRoutes);
+app.use('/api/representatives', representativeRoutes);
 
-
-
+// ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  res.send('API is running...');
+  res.json({
+    success: true,
+    message: 'Art Collection Client Portal API is running.',
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Error Handling Middlewares
+// ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
+// ─── Start Server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, async () => {
-  console.log(`Server running at: http://localhost:${PORT}`);
-  // Synchronize permissions with the database
-  await generatePermissions(app);
+app.listen(PORT, () => {
+  console.log(`\n🚀 Server running at: http://localhost:${PORT}`);
 });
-
-

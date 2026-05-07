@@ -1,143 +1,350 @@
 const prisma = require('../prismaClient');
-const { asyncHandler } = require('../middlewares/errorMiddleware');
+const asyncHandler = require('../utils/asyncHandler');
 
-// Helper: parse pictureUrls from body (can be string or array)
-const parsePictureUrls = (pictureUrls) => {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const parsePictures = (pictureUrls) => {
   if (!pictureUrls) return [];
   const urls = Array.isArray(pictureUrls) ? pictureUrls : [pictureUrls];
-  return urls.filter((url) => url && url.trim() !== '');
+  return urls.map((u) => u.trim()).filter(Boolean);
 };
 
-// @desc    Create a new ArtWork
-// @route   POST /api/artworks
-// @access  Private
-const createArtWork = asyncHandler(async (req, res) => {
-  const { artist, title, year, medium, dimensions, provenance, location, pictureUrls, price } = req.body;
+// Paginate helper
+const getPagination = (query) => {
+  const page = Math.max(1, parseInt(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+};
 
-  if (!artist || !title || !year || !medium || !price) {
+// ─── ADMIN / SUPERADMIN ───────────────────────────────────────────────────────
+
+// @desc    Create a new artwork
+// @route   POST /api/artworks
+// @access  SUPERADMIN, ADMIN
+const createArtWork = asyncHandler(async (req, res) => {
+  const { title, artist, year, medium, dimensions, provenance, location, pictureUrls, price } =
+    req.body;
+
+  if (!title || !artist || !year || !medium || !price) {
     res.status(400);
-    throw new Error('Please provide all required fields (artist, title, year, medium, price).');
+    throw new Error('Required fields: title, artist, year, medium, price.');
   }
 
-  const artWork = await prisma.artWork.create({
+  const pictures = parsePictures(pictureUrls);
+
+  const artwork = await prisma.artWork.create({
     data: {
-      artist,
       title,
+      artist,
       year: new Date(year),
       medium,
-      dimensions,
-      provenance,
-      location,
-      Pictures: parsePictureUrls(pictureUrls),
+      dimensions: dimensions || null,
+      provenance: provenance || null,
+      location: location || null,
+      pictures,
       price: parseFloat(price),
     },
   });
 
   res.status(201).json({
     success: true,
-    message: 'ArtWork created successfully.',
-    data: artWork,
+    message: 'Artwork created successfully.',
+    data: artwork,
   });
 });
 
-// @desc    Get all ArtWorks
+// @desc    Get all artworks (Role-aware)
 // @route   GET /api/artworks
-// @access  Public
+// @access  SUPERADMIN, ADMIN (all); CLIENT, CLIENT_REPRESENTATIVE (assigned only)
 const getAllArtWorks = asyncHandler(async (req, res) => {
-  const artWorks = await prisma.artWork.findMany({
-    orderBy: { createdAt: 'desc' },
-  });
+  const { page, limit, skip } = getPagination(req.query);
+  const { artist, title } = req.query;
+  const { role, id: userId } = req.user;
+
+  // Build the filter
+  const where = {
+    ...(artist && { artist: { contains: artist, mode: 'insensitive' } }),
+    ...(title && { title: { contains: title, mode: 'insensitive' } }),
+  };
+
+  // If CLIENT or REPRESENTATIVE, only show artworks they have access to
+  if (role === 'CLIENT' || role === 'CLIENT_REPRESENTATIVE') {
+    where.userAccess = {
+      some: {
+        userId: userId
+      }
+    };
+  }
+
+  const [artworks, total] = await Promise.all([
+    prisma.artWork.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.artWork.count({ where }),
+  ]);
 
   res.json({
     success: true,
-    count: artWorks.length,
-    data: artWorks,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: artworks,
   });
 });
 
-// @desc    Get single ArtWork by ID
+// @desc    Get single artwork by ID
 // @route   GET /api/artworks/:id
-// @access  Public
+// @access  SUPERADMIN, ADMIN (full); CLIENT/REP (only if they have access)
 const getArtWorkById = asyncHandler(async (req, res) => {
-  const artWork = await prisma.artWork.findUnique({
+  const artwork = await prisma.artWork.findUnique({
     where: { id: req.params.id },
   });
 
-  if (!artWork) {
+  if (!artwork) {
     res.status(404);
-    throw new Error('ArtWork not found.');
+    throw new Error('Artwork not found.');
   }
 
-  res.json({
-    success: true,
-    data: artWork,
+  const { role, id: userId } = req.user;
+
+  // SUPERADMIN and ADMIN see all
+  if (role === 'SUPERADMIN' || role === 'ADMIN') {
+    return res.json({ success: true, data: artwork });
+  }
+
+  // CLIENT / CLIENT_REPRESENTATIVE — verify access
+  const access = await prisma.artWorkAccess.findUnique({
+    where: { userId_artworkId: { userId, artworkId: req.params.id } },
   });
+
+  if (!access) {
+    res.status(403);
+    throw new Error('You Do not Have access to This Artwork');
+  }
+
+  res.json({ success: true, data: artwork });
 });
 
-// @desc    Update an ArtWork
+// @desc    Update an artwork
 // @route   PUT /api/artworks/:id
-// @access  Private
+// @access  SUPERADMIN, ADMIN
 const updateArtWork = asyncHandler(async (req, res) => {
-  const { artist, title, year, medium, dimensions, provenance, location, pictureUrls, price } = req.body;
+  const { title, artist, year, medium, dimensions, provenance, location, pictureUrls, price } =
+    req.body;
 
-  const artWorkExists = await prisma.artWork.findUnique({
-    where: { id: req.params.id },
-  });
-
-  if (!artWorkExists) {
+  const existing = await prisma.artWork.findUnique({ where: { id: req.params.id } });
+  if (!existing) {
     res.status(404);
-    throw new Error('ArtWork not found.');
+    throw new Error('Artwork not found.');
   }
 
-  // If pictureUrls are provided, replace existing. Otherwise keep existing.
-  const updatedPictures = pictureUrls !== undefined
-    ? parsePictureUrls(pictureUrls)
-    : artWorkExists.Pictures;
+  const pictures = pictureUrls !== undefined
+    ? parsePictures(pictureUrls)
+    : existing.pictures;
 
-  const updatedArtWork = await prisma.artWork.update({
+  const updated = await prisma.artWork.update({
     where: { id: req.params.id },
     data: {
-      artist,
-      title,
-      year: year ? new Date(year) : undefined,
-      medium,
-      dimensions,
-      provenance,
-      location,
-      Pictures: updatedPictures,
-      price: price ? parseFloat(price) : undefined,
+      ...(title && { title }),
+      ...(artist && { artist }),
+      ...(year && { year: new Date(year) }),
+      ...(medium && { medium }),
+      ...(dimensions !== undefined && { dimensions }),
+      ...(provenance !== undefined && { provenance }),
+      ...(location !== undefined && { location }),
+      pictures,
+      ...(price && { price: parseFloat(price) }),
     },
   });
 
   res.json({
     success: true,
-    message: 'ArtWork updated successfully.',
-    data: updatedArtWork,
+    message: 'Artwork updated successfully.',
+    data: updated,
   });
 });
 
-// @desc    Delete an ArtWork
+// @desc    Delete an artwork
 // @route   DELETE /api/artworks/:id
-// @access  Private
+// @access  SUPERADMIN, ADMIN
 const deleteArtWork = asyncHandler(async (req, res) => {
-  const artWorkExists = await prisma.artWork.findUnique({
-    where: { id: req.params.id },
-  });
-
-  if (!artWorkExists) {
+  const existing = await prisma.artWork.findUnique({ where: { id: req.params.id } });
+  if (!existing) {
     res.status(404);
-    throw new Error('ArtWork not found.');
+    throw new Error('Artwork not found.');
   }
 
-  await prisma.artWork.delete({
-    where: { id: req.params.id },
+  await prisma.artWork.delete({ where: { id: req.params.id } });
+
+  res.json({ success: true, message: 'Artwork deleted successfully.' });
+});
+
+// @desc    Assign artwork access to a CLIENT
+// @route   POST /api/artworks/:id/assign-to-client
+// @access  SUPERADMIN, ADMIN
+const assignArtworkToClient = asyncHandler(async (req, res) => {
+  const { clientId } = req.body;
+
+  if (!clientId) {
+    res.status(400);
+    throw new Error('clientId is required.');
+  }
+
+  const [artwork, client] = await Promise.all([
+    prisma.artWork.findUnique({ where: { id: req.params.id } }),
+    prisma.user.findUnique({ where: { id: clientId } }),
+  ]);
+
+  if (!artwork) {
+    res.status(404);
+    throw new Error('Artwork not found.');
+  }
+
+  if (!client || (client.role !== 'CLIENT' && client.role !== 'CLIENT_REPRESENTATIVE')) {
+    res.status(400);
+    throw new Error('Target user must be an existing CLIENT or CLIENT_REPRESENTATIVE.');
+  }
+
+  // Upsert — idempotent
+  const access = await prisma.artWorkAccess.upsert({
+    where: { userId_artworkId: { userId: clientId, artworkId: req.params.id } },
+    create: { userId: clientId, artworkId: req.params.id, grantedBy: req.user.id },
+    update: { grantedBy: req.user.id },
   });
 
-  res.json({
+  res.status(201).json({
     success: true,
-    message: 'ArtWork removed successfully.',
+    message: `Artwork "${artwork.title}" assigned to user ${client.name || client.email}.`,
+    data: access,
   });
 });
+
+// @desc    Revoke artwork access from a CLIENT (and cascades to their reps via DB constraint)
+// @route   DELETE /api/artworks/:id/revoke-from-client/:clientId
+// @access  SUPERADMIN, ADMIN
+const revokeArtworkFromClient = asyncHandler(async (req, res) => {
+  const { clientId } = req.params;
+
+  const access = await prisma.artWorkAccess.findUnique({
+    where: { userId_artworkId: { userId: clientId, artworkId: req.params.id } },
+  });
+
+  if (!access) {
+    res.status(404);
+    throw new Error('No access record found for this client and artwork.');
+  }
+
+  await prisma.artWorkAccess.delete({
+    where: { userId_artworkId: { userId: clientId, artworkId: req.params.id } },
+  });
+
+  res.json({ success: true, message: 'Artwork access revoked from user.' });
+});
+
+// ─── CLIENT ───────────────────────────────────────────────────────────────────
+
+// @desc    Assign one of CLIENT's accessible artworks to their representative
+// @route   POST /api/artworks/:id/assign-to-representative
+// @access  CLIENT
+const assignArtworkToRepresentative = asyncHandler(async (req, res) => {
+  const { representativeId } = req.body;
+  const artworkId = req.params.id;
+  const clientId = req.user.id;
+
+  if (!representativeId) {
+    res.status(400);
+    throw new Error('representativeId is required.');
+  }
+
+  // 1. Verify access (Admins have access to everything)
+  if (req.user.role !== 'SUPERADMIN' && req.user.role !== 'ADMIN') {
+    const clientAccess = await prisma.artWorkAccess.findUnique({
+      where: { userId_artworkId: { userId: clientId, artworkId } },
+    });
+
+    if (!clientAccess) {
+      res.status(403);
+      throw new Error('You do not have access to this artwork.');
+    }
+  }
+
+  // 2. Verify the representative
+  const rep = await prisma.user.findUnique({ where: { id: representativeId } });
+
+  if (!rep || rep.role !== 'CLIENT_REPRESENTATIVE') {
+    res.status(400);
+    throw new Error('Target user must be a CLIENT_REPRESENTATIVE.');
+  }
+
+  // If not Admin, verify the representative belongs to this CLIENT
+  if (req.user.role !== 'SUPERADMIN' && req.user.role !== 'ADMIN') {
+    if (rep.parentId !== clientId) {
+      res.status(403);
+      throw new Error(
+        'Invalid representative. You can only assign artworks to your own representatives.'
+      );
+    }
+  }
+
+  // 3. Grant access (idempotent upsert)
+  const access = await prisma.artWorkAccess.upsert({
+    where: { userId_artworkId: { userId: representativeId, artworkId } },
+    create: { userId: representativeId, artworkId, grantedBy: clientId },
+    update: { grantedBy: clientId },
+  });
+
+  res.status(201).json({
+    success: true,
+    message: `Artwork assigned to representative ${rep.name || rep.email}.`,
+    data: access,
+  });
+});
+
+// @desc    Revoke artwork access from a representative
+// @route   DELETE /api/artworks/:id/revoke-from-representative/:representativeId
+// @access  CLIENT
+const revokeArtworkFromRepresentative = asyncHandler(async (req, res) => {
+  const { representativeId } = req.params;
+  const artworkId = req.params.id;
+  const clientId = req.user.id;
+
+  // Confirm rep exists and is a representative
+  const rep = await prisma.user.findUnique({ where: { id: representativeId } });
+
+  if (!rep || rep.role !== 'CLIENT_REPRESENTATIVE') {
+    res.status(400);
+    throw new Error('Target user must be a CLIENT_REPRESENTATIVE.');
+  }
+
+  // If not Admin, verify the representative belongs to this CLIENT
+  if (req.user.role !== 'SUPERADMIN' && req.user.role !== 'ADMIN') {
+    if (rep.parentId !== clientId) {
+      res.status(403);
+      throw new Error('You can only manage access for your own representatives.');
+    }
+  }
+
+  const access = await prisma.artWorkAccess.findUnique({
+    where: { userId_artworkId: { userId: representativeId, artworkId } },
+  });
+
+  if (!access) {
+    res.status(404);
+    throw new Error('No access record found for this representative and artwork.');
+  }
+
+  await prisma.artWorkAccess.delete({
+    where: { userId_artworkId: { userId: representativeId, artworkId } },
+  });
+
+  res.json({ success: true, message: 'Artwork access revoked from representative.' });
+});
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   createArtWork,
@@ -145,4 +352,8 @@ module.exports = {
   getArtWorkById,
   updateArtWork,
   deleteArtWork,
+  assignArtworkToClient,
+  revokeArtworkFromClient,
+  assignArtworkToRepresentative,
+  revokeArtworkFromRepresentative,
 };

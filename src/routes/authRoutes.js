@@ -1,15 +1,41 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, verifyOTP, toggle2FA, resendOTP, amILogin, getAllUsers } = require('../controllers/authController');
-const { protect, admin } = require('../middlewares/authMiddleware');
 
-router.post('/register', registerUser);
-router.post('/login', loginUser);
-router.post('/verify-otp', verifyOTP);
-router.post('/resend-otp', resendOTP);
-router.get('/is-logged-in', protect, amILogin);
-router.put('/toggle-2fa', protect, toggle2FA);
-router.get('/users', protect, admin, getAllUsers);
+const {
+  registerUser,
+  loginUser,
+  verifyOTP,
+  resendOTP,
+  toggle2FA,
+  getMe,
+  getAllUsers,
+  createAdmin,
+} = require('../controllers/authController');
+
+const { protect } = require('../middlewares/authMiddleware');
+const { authorizeRoles } = require('../middlewares/roleMiddleware');
+
+// ─── Public ───────────────────────────────────────────────────────────────────
+router.post('/register',    registerUser);
+router.post('/login',       loginUser);
+router.post('/verify-otp',  verifyOTP);
+router.post('/resend-otp',  resendOTP);
+
+// ─── Authenticated ────────────────────────────────────────────────────────────
+router.get('/me',           protect, getMe);
+router.put('/toggle-2fa',   protect, toggle2FA);
+
+// ─── SUPERADMIN only ──────────────────────────────────────────────────────────
+router.post('/create-admin',
+  protect,
+  authorizeRoles('SUPERADMIN'),
+  createAdmin
+);
+
+router.get('/users',
+  protect,
+  authorizeRoles('SUPERADMIN', 'ADMIN'),
+  getAllUsers
+);
 
 module.exports = router;
-

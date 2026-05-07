@@ -4,317 +4,435 @@ const generateToken = require('../utils/generateToken');
 const generateOtp = require('../utils/generateOtp');
 const sendEmail = require('../utils/sendEmail');
 const otpTemplate = require('../utils/otpTemplate');
-const { asyncHandler } = require('../middlewares/errorMiddleware');
+const asyncHandler = require('../utils/asyncHandler');
 
-// @desc    Register a new user & Send OTP
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const safeUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  parentId: user.parentId,
+  isVerified: user.isVerified,
+  twoFactorAuth: user.twoFactorAuth,
+});
+
+// ─── Register ─────────────────────────────────────────────────────────────────
 // @route   POST /api/auth/register
+// @access  Public (first user → SUPERADMIN; subsequent → CLIENT by default)
+//          SUPERADMIN can pass role='ADMIN' to create an admin account.
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, twoFactorAuth } = req.body;
+  const { name, email, password, twoFactorAuth, role: requestedRole } = req.body;
 
-  // Validation
+  // ── Validation
   if (!email || !password) {
     res.status(400);
     throw new Error('Please provide both email and password.');
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!EMAIL_REGEX.test(email)) {
     res.status(400);
     throw new Error('Invalid email format.');
   }
 
   if (password.length < 8) {
     res.status(400);
-    throw new Error('Password must be at least 8 characters.');
+    throw new Error('Password must be at least 8 characters long.');
   }
 
-  const userExists = await prisma.user.findUnique({ where: { email } });
-
-  if (userExists) {
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
     res.status(400);
     throw new Error('An account with this email already exists.');
   }
 
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-
+  // ── Determine role
   const userCount = await prisma.user.count();
-  const roleName = userCount === 0 ? 'ADMINISTRATOR' : 'CLIENT';
+  let assignedRole = 'CLIENT';
+
+  if (userCount === 0) {
+    // Bootstrap: very first user is always SUPERADMIN
+    assignedRole = 'SUPERADMIN';
+  } else if (requestedRole) {
+    // Only SUPERADMIN may create ADMIN or SUPERADMIN accounts via this endpoint.
+    // Check if request carries a valid bearer token for a SUPERADMIN user.
+    // (Public registration always defaults to CLIENT unless caller is SUPERADMIN.)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer')) {
+      const jwt = require('jsonwebtoken');
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        const caller = await prisma.user.findUnique({ where: { id: decoded.id } });
+
+        if (caller && caller.role === 'SUPERADMIN' && ['ADMIN', 'SUPERADMIN'].includes(requestedRole)) {
+          assignedRole = requestedRole;
+        } else if (caller && caller.role === 'ADMIN' && requestedRole === 'ADMIN') {
+          // ADMIN cannot create SUPERADMIN — silently fall back to CLIENT for invalid requests
+          res.status(403);
+          throw new Error('Admins cannot create SUPERADMIN accounts.');
+        }
+      } catch (jwtErr) {
+        if (jwtErr.message.includes('Admins')) throw jwtErr;
+        // Expired/invalid token → public registration → CLIENT role
+      }
+    }
+  }
+
+  // ── Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const use2FA = twoFactorAuth !== undefined ? Boolean(twoFactorAuth) : true;
 
   const user = await prisma.user.create({
     data: {
       name,
       email,
       password: hashedPassword,
-      role: {
-        connectOrCreate: {
-          where: { name: roleName },
-          create: { name: roleName }
-        }
-      },
-      twoFactorAuth: twoFactorAuth !== undefined ? twoFactorAuth : true,
-      isVerified: twoFactorAuth === false ? true : false,
+      role: assignedRole,
+      twoFactorAuth: use2FA,
+      // If 2FA is off, mark as verified immediately
+      isVerified: use2FA === false,
     },
   });
 
-
-  if (user.twoFactorAuth === false) {
+  // ── Skip OTP if 2FA disabled
+  if (!use2FA) {
     return res.status(201).json({
       success: true,
-      message: 'Email verified successfully. Your account is ready.',
+      message: 'Registration successful. Your account is ready.',
       data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+        ...safeUser(user),
         token: generateToken(user.id),
       },
     });
   }
 
+  // ── Send OTP
   const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
-  await prisma.oTP.create({
-    data: { userId: user.id, otp, expiresAt },
-  });
-
-  console.log(`[TESTING] Registration OTP for ${user.email}: ${otp}`);
+  await prisma.oTP.create({ data: { userId: user.id, otp, expiresAt } });
+  console.log(`[DEV] Registration OTP for ${user.email}: ${otp}`);
 
   try {
     await sendEmail({
       email: user.email,
-      subject: 'Email Verification OTP',
-      message: `Your OTP for registration is: ${otp}`,
+      subject: 'Verify Your Email — Art Portal',
+      message: `Your registration OTP is: ${otp}`,
       html: otpTemplate(otp),
     });
-    res.status(201).json({
-      success: true,
-      message: 'OTP sent to your email. Please verify to complete registration.',
-    });
   } catch (err) {
-    console.error('Email sending failed:', err.message);
+    console.error('Email send failed:', err.message);
     res.status(500);
-    throw new Error('Unable to send verification email. Please try again later.');
+    throw new Error('Unable to send verification email. Please try again.');
   }
+
+  res.status(201).json({
+    success: true,
+    message: 'Registration initiated. Please check your email for the OTP.',
+  });
 });
 
-// @desc    Login user & Send OTP
+// ─── Login ────────────────────────────────────────────────────────────────────
 // @route   POST /api/auth/login
+// @access  Public
 const loginUser = asyncHandler(async (req, res) => {
-  const { email, password, twoFactorAuth } = req.body;
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400);
+    throw new Error('Please provide email and password.');
+  }
 
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (user && (await bcrypt.compare(password, user.password))) {
-    if (user.isVerified === false) {
-      res.status(401);
-      throw new Error('Email not verified. Please verify your email to continue.');
-    }
-
-    const shouldSendOTP = twoFactorAuth !== undefined ? twoFactorAuth : user.twoFactorAuth;
-
-    if (shouldSendOTP === false) {
-      return res.json({
-        success: true,
-        message: 'Logged in successfully.',
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          token: generateToken(user.id),
-        },
-      });
-    }
-
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await prisma.oTP.create({
-      data: { userId: user.id, otp, expiresAt },
-    });
-
-    console.log(`[TESTING] Login OTP for ${user.email}: ${otp}`);
-
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'Login OTP',
-        message: `Your OTP for login is: ${otp}`,
-        html: otpTemplate(otp),
-      });
-      res.json({
-        success: true,
-        message: 'OTP sent to your email. Please verify to login.',
-      });
-    } catch (err) {
-      console.error('Email sending failed:', err.message);
-      res.status(500);
-      throw new Error('Unable to send login OTP. Please try again later.');
-    }
-  } else {
+  if (!user || !(await bcrypt.compare(password, user.password))) {
     res.status(401);
-    throw new Error('Invalid email or password. Please check your credentials and try again.');
-  }
-});
-
-// @desc    Verify OTP for Register/Login
-// @route   POST /api/auth/verify-otp
-const verifyOTP = asyncHandler(async (req, res) => {
-  const { email, otp } = req.body;
-
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: { otps: true }
-  });
-
-  if (!user) {
-    res.status(404);
-    throw new Error('Account not found with the provided email.');
+    throw new Error('Invalid email or password.');
   }
 
-  const foundOtp = await prisma.oTP.findFirst({
-    where: {
-      userId: user.id,
-      otp: otp,
-      expiresAt: { gt: new Date() }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  if (!foundOtp) {
-    res.status(400);
-    throw new Error('Invalid OTP. Please try again.');
+  if (!user.isVerified) {
+    res.status(401);
+    throw new Error('Email not verified. Please verify your email to continue.');
   }
 
-  // Mark user as verified
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { isVerified: true },
-  });
+  // ── Skip OTP if 2FA disabled
+  if (!user.twoFactorAuth) {
+    return res.json({
+      success: true,
+      message: 'Logged in successfully.',
+      data: {
+        ...safeUser(user),
+        token: generateToken(user.id),
+      },
+    });
+  }
 
-  // Delete used OTPs to keep DB clean
-  await prisma.oTP.deleteMany({
-    where: { userId: user.id }
-  });
+  // ── Send login OTP
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-  // Decide success message based on user state
-  const isNewlyVerified = user.isVerified === false;
+  await prisma.oTP.create({ data: { userId: user.id, otp, expiresAt } });
+  console.log(`[DEV] Login OTP for ${user.email}: ${otp}`);
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'Your Login OTP — Art Portal',
+      message: `Your login OTP is: ${otp}`,
+      html: otpTemplate(otp),
+    });
+  } catch (err) {
+    console.error('Email send failed:', err.message);
+    res.status(500);
+    throw new Error('Unable to send login OTP. Please try again.');
+  }
 
   res.json({
     success: true,
-    message: isNewlyVerified
-      ? 'Email verified successfully. Your account is ready.'
-      : 'OTP verified successfully. Logged in successfully.',
+    message: 'OTP sent to your email. Please verify to complete login.',
+  });
+});
+
+// ─── Verify OTP ───────────────────────────────────────────────────────────────
+// @route   POST /api/auth/verify-otp
+// @access  Public
+const verifyOTP = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    res.status(400);
+    throw new Error('Email and OTP are required.');
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    res.status(404);
+    throw new Error('No account found with this email.');
+  }
+
+  const validOtp = await prisma.oTP.findFirst({
+    where: {
+      userId: user.id,
+      otp: String(otp),
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!validOtp) {
+    res.status(400);
+    throw new Error('Invalid or expired OTP. Please request a new one.');
+  }
+
+  const wasAlreadyVerified = user.isVerified;
+
+  // Mark verified & clean up OTPs
+  await prisma.user.update({ where: { id: user.id }, data: { isVerified: true } });
+  await prisma.oTP.deleteMany({ where: { userId: user.id } });
+
+  res.json({
+    success: true,
+    message: wasAlreadyVerified
+      ? 'OTP verified. Logged in successfully.'
+      : 'Email verified successfully. Your account is ready.',
     data: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
+      ...safeUser({ ...user, isVerified: true }),
       token: generateToken(user.id),
     },
   });
 });
 
-// @desc    Toggle 2FA setting
+// ─── Resend OTP ───────────────────────────────────────────────────────────────
+// @route   POST /api/auth/resend-otp
+// @access  Public
+const resendOTP = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400);
+    throw new Error('Please provide your email address.');
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    res.status(404);
+    throw new Error('No account found with this email.');
+  }
+
+  // Invalidate old OTPs
+  await prisma.oTP.deleteMany({ where: { userId: user.id } });
+
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await prisma.oTP.create({ data: { userId: user.id, otp, expiresAt } });
+  console.log(`[DEV] Resent OTP for ${user.email}: ${otp}`);
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'New OTP — Art Portal',
+      message: `Your new OTP is: ${otp}`,
+      html: otpTemplate(otp),
+    });
+  } catch (err) {
+    console.error('Email send failed:', err.message);
+    res.status(500);
+    throw new Error('Unable to send OTP. Please try again later.');
+  }
+
+  res.json({ success: true, message: 'A new OTP has been sent to your email.' });
+});
+
+// ─── Toggle 2FA ───────────────────────────────────────────────────────────────
 // @route   PUT /api/auth/toggle-2fa
+// @access  Private
 const toggle2FA = asyncHandler(async (req, res) => {
   const { twoFactorAuth } = req.body;
 
-  const updatedUser = await prisma.user.update({
+  if (typeof twoFactorAuth !== 'boolean') {
+    res.status(400);
+    throw new Error('twoFactorAuth must be a boolean value.');
+  }
+
+  const updated = await prisma.user.update({
     where: { id: req.user.id },
     data: { twoFactorAuth },
   });
 
   res.json({
     success: true,
-    message: `Two-Factor Authentication turned ${updatedUser.twoFactorAuth ? 'ON' : 'OFF'}`,
-    data: {
-      twoFactorAuth: updatedUser.twoFactorAuth
-    }
+    message: `Two-Factor Authentication turned ${updated.twoFactorAuth ? 'ON' : 'OFF'}.`,
+    data: { twoFactorAuth: updated.twoFactorAuth },
   });
 });
 
-// @desc    Resend OTP
-// @route   POST /api/auth/resend-otp
-const resendOTP = asyncHandler(async (req, res) => {
-  const { email } = req.body;
+// ─── Me ───────────────────────────────────────────────────────────────────────
+// @route   GET /api/auth/me
+// @access  Private
+const getMe = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: req.user });
+});
 
-  if (!email) {
+// ─── Get All Users ────────────────────────────────────────────────────────────
+// @route   GET /api/auth/users
+// @access  SUPERADMIN, ADMIN
+const getAllUsers = asyncHandler(async (req, res) => {
+  const { role, page = 1, limit = 20 } = req.query;
+
+  const where = role ? { role } : {};
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        parentId: true,
+        isVerified: true,
+        twoFactorAuth: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit),
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  res.json({
+    success: true,
+    total,
+    page: Number(page),
+    pages: Math.ceil(total / Number(limit)),
+    data: users,
+  });
+});
+
+// ─── Create Admin (SUPERADMIN only) ──────────────────────────────────────────
+// @route   POST /api/auth/create-admin
+// @access  SUPERADMIN
+const createAdmin = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!email || !password) {
     res.status(400);
-    throw new Error('Please provide an email address.');
+    throw new Error('Please provide email and password.');
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-
-  if (!user) {
-    res.status(404);
-    throw new Error('Account not found with the provided email.');
+  if (!EMAIL_REGEX.test(email)) {
+    res.status(400);
+    throw new Error('Invalid email format.');
   }
 
-  // Delete any existing OTPs for this user (effectively "expiring" them)
-  await prisma.oTP.deleteMany({
-    where: { userId: user.id }
+  if (password.length < 8) {
+    res.status(400);
+    throw new Error('Password must be at least 8 characters long.');
+  }
+
+  const exists = await prisma.user.findUnique({ where: { email } });
+  if (exists) {
+    res.status(400);
+    throw new Error('An account with this email already exists.');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const admin = await prisma.user.create({
+    data: {
+      name,
+      email,
+      password: hashedPassword,
+      role: 'ADMIN',
+      isVerified: false, // Now requires verification
+      twoFactorAuth: true,
+    },
   });
 
+  // Generate OTP
   const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
   await prisma.oTP.create({
-    data: { userId: user.id, otp, expiresAt },
+    data: { userId: admin.id, otp, expiresAt },
   });
 
-  console.log(`[TESTING] Resent OTP for ${user.email}: ${otp}`);
+  console.log(`[DEV] Admin Verification OTP for ${admin.email}: ${otp}`);
 
+  // Send Verification Email
   try {
     await sendEmail({
-      email: user.email,
-      subject: 'Your New Verification OTP',
-      message: `Your new OTP code is: ${otp}`,
+      email: admin.email,
+      subject: 'Your Admin Account Verification — Art Portal',
+      message: `A new admin account has been created for you. Your verification OTP is: ${otp}`,
       html: otpTemplate(otp),
     });
-
-    res.json({
-      success: true,
-      message: 'A new OTP has been sent to your email.',
-    });
   } catch (err) {
-    console.error('Email sending failed:', err.message);
-    res.status(500);
-    throw new Error('Unable to send the new OTP. Please try again later.');
+    console.error('Email send failed:', err.message);
+    // We don't throw here so the response still goes through, 
+    // but the admin will need to request a resend later.
   }
-});
 
-// @desc    Check if user is logged in
-// @route   GET /api/auth/am-i-login
-const amILogin = asyncHandler(async (req, res) => {
-  res.json({
+  res.status(201).json({
     success: true,
-    data: req.user,
+    message: 'Admin account creation initiated. Please check your email for the OTP.',
   });
 });
 
-
-
-// @desc    Get all users (Admin only)
-// @route   GET /api/auth/users
-const getAllUsers = asyncHandler(async (req, res) => {
-  const users = await prisma.user.findMany({
-    include: { role: true },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  res.json({
-    success: true,
-    data: users
-  });
-});
-
+// ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = {
   registerUser,
   loginUser,
   verifyOTP,
-  toggle2FA,
   resendOTP,
-  amILogin,
+  toggle2FA,
+  getMe,
   getAllUsers,
+  createAdmin,
 };
-

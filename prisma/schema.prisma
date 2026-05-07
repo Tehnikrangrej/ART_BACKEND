@@ -1,8 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ============================================================
+// ART Collection Client Portal — Prisma Schema
+// ============================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -12,53 +10,64 @@ datasource db {
   provider = "postgresql"
 }
 
-model Role {
-  id          String           @id @default(uuid())
-  name        String           @unique
-  description String?
-  users       User[]
-  permissions RolePermission[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  CLIENT
+  CLIENT_REPRESENTATIVE
 }
+
+enum EnquiryStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum RepresentativeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================
+// USER  (single table, self-relation for CLIENT → REPRESENTATIVE)
+// ============================================================
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  password   String
-  name       String?
-  roleId        String?
-  role          Role?    @relation(fields: [roleId], references: [id])
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  name          String?
+  role          UserRole @default(CLIENT)
+
+  // Self-relation: CLIENT_REPRESENTATIVE has parentId pointing to their CLIENT
+  parentId      String?
+  parent        User?    @relation("ClientRepresentatives", fields: [parentId], references: [id], onDelete: SetNull)
+  representatives User[] @relation("ClientRepresentatives")
+
   isVerified    Boolean  @default(false)
   twoFactorAuth Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  otps              OTP[]
-  enquiries         Enquiry[]
-  assignedEnquiries Enquiry[] @relation("AssignedEnquiries")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  otps                   OTP[]
+  enquiries              Enquiry[]
+  assignedEnquiries      Enquiry[]               @relation("AssignedEnquiries")
+  artworkAccess          ArtWorkAccess[]
+  representativeRequests RepresentativeRequest[] @relation("ClientRequests")
+  reviewedRequests       RepresentativeRequest[] @relation("ReviewedRequests")
 }
 
-
-model Permission {
-  id        String           @id @default(uuid())
-  name      String           @unique // e.g., READ_ARTWORK
-  action    String           // e.g., READ
-  resource  String           // e.g., ARTWORK
-  roles     RolePermission[]
-  createdAt DateTime         @default(now())
-}
-
-model RolePermission {
-  id           String     @id @default(uuid())
-  roleId       String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permissionId String
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([roleId, permissionId])
-}
-
-
+// ============================================================
+// OTP
+// ============================================================
 
 model OTP {
   id        String   @id @default(uuid())
@@ -71,28 +80,53 @@ model OTP {
   @@index([userId])
 }
 
-model ArtWork{
-  id String  @id @default(uuid())
-  artist String
-  title String
-  year DateTime
-  medium String
-  dimensions String
-  provenance String
-  location String
-  Pictures String[]
-  price Float
+// ============================================================
+// ARTWORK
+// ============================================================
+
+model ArtWork {
+  id         String   @id @default(uuid())
+  title      String
+  artist     String
+  year       DateTime
+  medium     String
+  dimensions String?
+  provenance String?
+  location   String?
+  pictures   String[]
+  price      Float
+
   createdAt DateTime @default(now())
-  updatedAt DateTime  @updatedAt
-  enquiries Enquiry[]
+  updatedAt DateTime @updatedAt
+
+  // Access control junction
+  userAccess ArtWorkAccess[]
+  enquiries  Enquiry[]
 }
 
-enum EnquiryStatus {
-  PENDING
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
+// ============================================================
+// ARTWORK ACCESS  (many-to-many: User ↔ ArtWork)
+// Records which user has access to which artwork, and who granted it.
+// ============================================================
+
+model ArtWorkAccess {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artworkId String
+  artwork   ArtWork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  grantedBy String?  // ID of the admin/client who granted this access
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, artworkId])
+  @@index([userId])
+  @@index([artworkId])
 }
+
+// ============================================================
+// ENQUIRY
+// ============================================================
 
 model Enquiry {
   id         String        @id @default(uuid())
@@ -104,16 +138,45 @@ model Enquiry {
   status     EnquiryStatus @default(PENDING)
   assignedTo String?
   assignee   User?         @relation("AssignedEnquiries", fields: [assignedTo], references: [id])
-  history    EnquiryHistory[]
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+
+  history   EnquiryHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
+// ============================================================
+// ENQUIRY HISTORY  (audit trail)
+// ============================================================
 
 model EnquiryHistory {
   id        String   @id @default(uuid())
   enquiryId String
   enquiry   Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
-  action    String   // e.g., "Status changed to RESOLVED"
-  doneBy    String   // Name or ID of the person who made the change
+  action    String
+  doneBy    String   // Name or email of the actor
+
   createdAt DateTime @default(now())
+}
+
+// ============================================================
+// REPRESENTATIVE REQUEST
+// CLIENT submits → ADMIN/SUPERADMIN approves/rejects
+// ============================================================
+
+model RepresentativeRequest {
+  id             String                      @id @default(uuid())
+  clientId       String
+  client         User                        @relation("ClientRequests", fields: [clientId], references: [id], onDelete: Cascade)
+  requestedName  String
+  requestedEmail String
+  status         RepresentativeRequestStatus @default(PENDING)
+  reviewedBy     String?
+  reviewer       User?                       @relation("ReviewedRequests", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([status])
 }
