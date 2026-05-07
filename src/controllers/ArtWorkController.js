@@ -80,6 +80,15 @@ const getAllArtWorks = asyncHandler(async (req, res) => {
   const [artworks, total] = await Promise.all([
     prisma.artWork.findMany({
       where,
+      include: {
+        userAccess: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, role: true }
+            }
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
@@ -102,6 +111,15 @@ const getAllArtWorks = asyncHandler(async (req, res) => {
 const getArtWorkById = asyncHandler(async (req, res) => {
   const artwork = await prisma.artWork.findUnique({
     where: { id: req.params.id },
+    include: {
+      userAccess: {
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, role: true }
+          }
+        }
+      }
+    }
   });
 
   if (!artwork) {

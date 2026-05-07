@@ -314,10 +314,23 @@ const toggle2FA = asyncHandler(async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: {
+      artworkAccess: {
+        include: {
+          artwork: true
+        }
+      },
+      representatives: true,
+      parent: { select: { id: true, name: true, email: true } }
+    }
+  });
+
   res.json({
     success: true,
     loggedIn: true,
-    user: safeUser(req.user),
+    user: safeUser(user),
   });
 });
 
@@ -342,6 +355,11 @@ const getAllUsers = asyncHandler(async (req, res) => {
         isVerified: true,
         twoFactorAuth: true,
         createdAt: true,
+        artworkAccess: {
+          include: {
+            artwork: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
       skip,

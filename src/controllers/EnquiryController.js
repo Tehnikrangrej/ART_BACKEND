@@ -58,7 +58,8 @@ const createEnquiry = asyncHandler(async (req, res) => {
   await prisma.enquiryHistory.create({
     data: {
       enquiryId: enquiry.id,
-      message: 'Enquiry submitted by client.',
+      action: 'Enquiry submitted by client.',
+      doneBy: req.user.name || req.user.email,
     },
   });
 
@@ -237,7 +238,8 @@ const updateEnquiryStatus = asyncHandler(async (req, res) => {
   await prisma.enquiryHistory.create({
     data: {
       enquiryId: id,
-      message: `Status changed from ${enquiry.status} to ${status}.`,
+      action: `Status changed from ${enquiry.status} to ${status}.`,
+      doneBy: req.user.name || req.user.email,
     },
   });
 
@@ -281,7 +283,8 @@ const assignEnquiry = asyncHandler(async (req, res) => {
   await prisma.enquiryHistory.create({
     data: {
       enquiryId: id,
-      message: `Enquiry assigned to admin ${admin.name || admin.email}. Status set to IN_PROGRESS.`,
+      action: `Enquiry assigned to admin ${admin.name || admin.email}.`,
+      doneBy: req.user.name || req.user.email,
     },
   });
 
