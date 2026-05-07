@@ -223,14 +223,15 @@ const assignArtworkToClient = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Revoke artwork access from a CLIENT (and cascades to their reps via DB constraint)
+// @desc    Revoke artwork access from a CLIENT (and all their representatives)
 // @route   DELETE /api/artworks/:id/revoke-from-client/:clientId
 // @access  SUPERADMIN, ADMIN
 const revokeArtworkFromClient = asyncHandler(async (req, res) => {
   const { clientId } = req.params;
+  const artworkId = req.params.id;
 
   const access = await prisma.artWorkAccess.findUnique({
-    where: { userId_artworkId: { userId: clientId, artworkId: req.params.id } },
+    where: { userId_artworkId: { userId: clientId, artworkId } },
   });
 
   if (!access) {
@@ -238,11 +239,33 @@ const revokeArtworkFromClient = asyncHandler(async (req, res) => {
     throw new Error('No access record found for this client and artwork.');
   }
 
-  await prisma.artWorkAccess.delete({
-    where: { userId_artworkId: { userId: clientId, artworkId: req.params.id } },
+  // Find all representatives belonging to this client
+  const reps = await prisma.user.findMany({
+    where: { parentId: clientId, role: 'CLIENT_REPRESENTATIVE' },
+    select: { id: true },
   });
 
-  res.json({ success: true, message: 'Artwork access revoked from user.' });
+  const repIds = reps.map((r) => r.id);
+
+  // Perform revocation in a transaction
+  await prisma.$transaction([
+    // 1. Revoke from the Client
+    prisma.artWorkAccess.delete({
+      where: { userId_artworkId: { userId: clientId, artworkId } },
+    }),
+    // 2. Revoke from all their representatives
+    prisma.artWorkAccess.deleteMany({
+      where: {
+        artworkId,
+        userId: { in: repIds },
+      },
+    }),
+  ]);
+
+  res.json({ 
+    success: true, 
+    message: 'Artwork access revoked from client and all their representatives.' 
+  });
 });
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────────
@@ -260,19 +283,7 @@ const assignArtworkToRepresentative = asyncHandler(async (req, res) => {
     throw new Error('representativeId is required.');
   }
 
-  // 1. Verify access (Admins have access to everything)
-  if (req.user.role !== 'SUPERADMIN' && req.user.role !== 'ADMIN') {
-    const clientAccess = await prisma.artWorkAccess.findUnique({
-      where: { userId_artworkId: { userId: clientId, artworkId } },
-    });
-
-    if (!clientAccess) {
-      res.status(403);
-      throw new Error('You do not have access to this artwork.');
-    }
-  }
-
-  // 2. Verify the representative
+  // 1. Verify access (Clients must have access to assign; Admins are checked against the parent Client)
   const rep = await prisma.user.findUnique({ where: { id: representativeId } });
 
   if (!rep || rep.role !== 'CLIENT_REPRESENTATIVE') {
@@ -280,14 +291,26 @@ const assignArtworkToRepresentative = asyncHandler(async (req, res) => {
     throw new Error('Target user must be a CLIENT_REPRESENTATIVE.');
   }
 
-  // If not Admin, verify the representative belongs to this CLIENT
-  if (req.user.role !== 'SUPERADMIN' && req.user.role !== 'ADMIN') {
-    if (rep.parentId !== clientId) {
-      res.status(403);
-      throw new Error(
-        'Invalid representative. You can only assign artworks to your own representatives.'
-      );
-    }
+  const parentClientId = rep.parentId;
+  if (!parentClientId) {
+    res.status(400);
+    throw new Error('This representative does not have an associated parent Client.');
+  }
+
+  // Check if the parent Client has access to this artwork
+  const parentAccess = await prisma.artWorkAccess.findUnique({
+    where: { userId_artworkId: { userId: parentClientId, artworkId } },
+  });
+
+  if (!parentAccess) {
+    res.status(403);
+    throw new Error('The parent Client does not have access to this artwork. Assign it to the Client first.');
+  }
+
+  // 2. If requester is a CLIENT, verify they are the parent of this representative
+  if (req.user.role === 'CLIENT' && req.user.id !== parentClientId) {
+    res.status(403);
+    throw new Error('You can only manage access for your own representatives.');
   }
 
   // 3. Grant access (idempotent upsert)
