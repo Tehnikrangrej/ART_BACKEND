@@ -180,6 +180,18 @@ const getAllRepresentativeRequests = asyncHandler(async (req, res) => {
 // @route   PUT /api/representatives/requests/:id/approve
 // @access  SUPERADMIN, ADMIN
 const approveRepresentativeRequest = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    res.status(400);
+    throw new Error('Please provide a password for the representative account.');
+  }
+
+  if (password.length < 8) {
+    res.status(400);
+    throw new Error('Password must be at least 8 characters long.');
+  }
+
   const request = await prisma.representativeRequest.findUnique({
     where: { id: req.params.id },
     include: { client: true },
@@ -206,9 +218,8 @@ const approveRepresentativeRequest = asyncHandler(async (req, res) => {
     );
   }
 
-  // Generate a secure temporary password
-  const tempPassword = crypto.randomBytes(10).toString('base64url');
-  const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  // Hash the provided password
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   // Create the CLIENT_REPRESENTATIVE account in a transaction
   const [updatedRequest, newRep] = await prisma.$transaction([
@@ -224,17 +235,20 @@ const approveRepresentativeRequest = asyncHandler(async (req, res) => {
         role: 'CLIENT_REPRESENTATIVE',
         parentId: request.clientId,
         isVerified: true,
-        twoFactorAuth: false,
+        twoFactorAuth: true,
       },
     }),
   ]);
+
+  console.log(`\n[DEV] Representative account created:`);
+  console.log(`      Email: ${newRep.email}\n`);
 
   // Send onboarding email to the new representative
   try {
     await sendEmail({
       email: newRep.email,
       subject: 'Welcome to Art Portal — Your Account is Ready',
-      message: `Your representative account has been created. Temporary password: ${tempPassword}`,
+      message: `Your representative account has been created. Your login email is ${newRep.email} and your password is ${password}`,
       html: `
         <div style="font-family:sans-serif;padding:24px;border:1px solid #eee;border-radius:12px;max-width:520px">
           <h2 style="color:#1a1a2e">Welcome to Art Portal</h2>
@@ -246,11 +260,9 @@ const approveRepresentativeRequest = asyncHandler(async (req, res) => {
           <p>Please use the credentials below to log in:</p>
           <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0">
             <p style="margin:0"><strong>Email:</strong> ${newRep.email}</p>
-            <p style="margin:8px 0 0"><strong>Temporary Password:</strong> ${tempPassword}</p>
+            <p style="margin:8px 0 0"><strong>Password:</strong> ${password}</p>
           </div>
-          <p style="color:#e53e3e;font-size:13px">
-            ⚠ Please change your password after your first login.
-          </p>
+          <p>Please log in to the portal to view your assigned artworks.</p>
           <p>If you have any questions, contact your client manager.</p>
         </div>
       `,

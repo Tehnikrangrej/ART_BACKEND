@@ -23,6 +23,7 @@ router.post('/resend-otp',  resendOTP);
 
 // ─── Authenticated ────────────────────────────────────────────────────────────
 router.get('/me',           protect, getMe);
+router.get('/is-logged-in', protect, getMe);
 router.put('/toggle-2fa',   protect, toggle2FA);
 
 // ─── SUPERADMIN only ──────────────────────────────────────────────────────────

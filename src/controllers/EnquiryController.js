@@ -1,7 +1,6 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
 const sendEmail = require('../utils/sendEmail');
-const enquiryTemplate = require('../utils/enquiryTemplate');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,65 +30,71 @@ const createEnquiry = asyncHandler(async (req, res) => {
     throw new Error('artworkId and message are required.');
   }
 
-  if (!req.user.isVerified) {
-    res.status(403);
-    throw new Error('Please verify your email before submitting enquiries.');
-  }
-
-  // Verify artwork exists
-  const artwork = await prisma.artWork.findUnique({ where: { id: artworkId } });
-  if (!artwork) {
-    res.status(404);
-    throw new Error('Artwork not found.');
-  }
-
-  // CLIENT and CLIENT_REPRESENTATIVE can only enquire about artworks they have access to
-  const { role, id: userId } = req.user;
-  if (role === 'CLIENT' || role === 'CLIENT_REPRESENTATIVE') {
-    const access = await prisma.artWorkAccess.findUnique({
-      where: { userId_artworkId: { userId, artworkId } },
-    });
-    if (!access) {
-      res.status(403);
-      throw new Error('You do not have access to this artwork.');
-    }
-  }
-
-  const enquiry = await prisma.enquiry.create({
-    data: { artworkId, userId, message },
-    include: enquiryFullInclude,
+  // 1. Verify user has access to this artwork
+  const access = await prisma.artWorkAccess.findUnique({
+    where: { userId_artworkId: { userId: req.user.id, artworkId } },
   });
 
-  // Audit trail
-  await prisma.enquiryHistory.create({
+  if (!access) {
+    res.status(403);
+    throw new Error('You Do not Have access to This Artwork');
+  }
+
+  // 2. Create the enquiry
+  const enquiry = await prisma.enquiry.create({
     data: {
-      enquiryId: enquiry.id,
-      action: 'Enquiry submitted.',
-      doneBy: req.user.name || req.user.email,
+      userId: req.user.id,
+      artworkId,
+      message,
+      status: 'PENDING',
+    },
+    include: {
+      artwork: true,
+      user: { select: { name: true, email: true } },
     },
   });
 
-  // Notify admin team
+  // 3. Log initial history
+  await prisma.enquiryHistory.create({
+    data: {
+      enquiryId: enquiry.id,
+      message: 'Enquiry submitted by client.',
+    },
+  });
+
+  // 4. Notify Superadmins via email
   try {
-    await sendEmail({
-      email: process.env.ADMIN_EMAIL || 'admin@artportal.com',
-      subject: `New Enquiry: ${artwork.title}`,
-      message: `New enquiry from ${req.user.name || req.user.email} about "${artwork.title}".`,
-      html: enquiryTemplate({
-        artworkTitle: artwork.title,
-        artist: artwork.artist,
-        clientName: req.user.name || 'N/A',
-        clientEmail: req.user.email,
-        message,
-      }),
+    const superAdmins = await prisma.user.findMany({
+      where: { role: 'SUPERADMIN' },
+      select: { email: true },
     });
+
+    const superAdminEmails = superAdmins.map((sa) => sa.email);
+
+    if (superAdminEmails.length > 0) {
+      await sendEmail({
+        email: superAdminEmails.join(','),
+        subject: `New Enquiry Alert: ${enquiry.artwork.title}`,
+        message: `A new enquiry has been submitted for "${enquiry.artwork.title}".`,
+        html: `
+          <div style="font-family:sans-serif;padding:24px;border:1px solid #eee;border-radius:12px;max-width:520px">
+            <h2 style="color:#1a1a2e">New Enquiry Received</h2>
+            <p><strong>Client:</strong> ${enquiry.user.name || enquiry.user.email}</p>
+            <p><strong>Artwork:</strong> ${enquiry.artwork.title}</p>
+            <p><strong>Message:</strong></p>
+            <blockquote style="background:#f9f9f9;padding:12px;border-left:4px solid #1a1a2e;margin:16px 0">${message}</blockquote>
+            <p>Please log in to the portal to assign this enquiry to an Admin.</p>
+          </div>
+        `,
+      });
+    }
   } catch (err) {
-    console.error('[Email] Failed to notify admin:', err.message);
+    console.error('[Email] Superadmin notification failed:', err.message);
   }
 
   res.status(201).json({
     success: true,
-    message: 'Enquiry submitted. Our team will be in touch shortly.',
+    message: 'Enquiry submitted successfully. A notification has been sent to the Superadmin.',
     data: enquiry,
   });
 });
@@ -232,8 +237,7 @@ const updateEnquiryStatus = asyncHandler(async (req, res) => {
   await prisma.enquiryHistory.create({
     data: {
       enquiryId: id,
-      action: `Status changed from ${enquiry.status} to ${status}.`,
-      doneBy: req.user.name || req.user.email,
+      message: `Status changed from ${enquiry.status} to ${status}.`,
     },
   });
 
@@ -277,8 +281,7 @@ const assignEnquiry = asyncHandler(async (req, res) => {
   await prisma.enquiryHistory.create({
     data: {
       enquiryId: id,
-      action: `Enquiry assigned to admin ${admin.name || admin.email}. Status set to IN_PROGRESS.`,
-      doneBy: req.user.name || req.user.email,
+      message: `Enquiry assigned to admin ${admin.name || admin.email}. Status set to IN_PROGRESS.`,
     },
   });
 

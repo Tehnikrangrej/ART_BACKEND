@@ -314,7 +314,11 @@ const toggle2FA = asyncHandler(async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: req.user });
+  res.json({
+    success: true,
+    loggedIn: true,
+    user: safeUser(req.user),
+  });
 });
 
 // ─── Get All Users ────────────────────────────────────────────────────────────
