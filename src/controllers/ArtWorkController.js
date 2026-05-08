@@ -280,9 +280,9 @@ const revokeArtworkFromClient = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  res.json({ 
-    success: true, 
-    message: 'Artwork access revoked from client and all their representatives.' 
+  res.json({
+    success: true,
+    message: 'Artwork access revoked from client and all their representatives.'
   });
 });
 
