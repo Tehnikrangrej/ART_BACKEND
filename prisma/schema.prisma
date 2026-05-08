@@ -66,6 +66,7 @@ model User {
   shareLinks             ArtworkShareLink[] @relation("CreatedShareLinks")
   receivedShareLinks     ArtworkShareLink[] @relation("SharedWithRecipients")
   favoriteArtworks       FavoriteArtwork[]
+  shortlistedArtworks    ShortlistedArtwork[]
 }
 
 // ============================================================
@@ -107,6 +108,7 @@ model ArtWork {
   enquiries  Enquiry[]
   shareLinks ArtworkShareLink[]
   favoritedBy FavoriteArtwork[]
+  shortlistedBy ShortlistedArtwork[]
 }
 
 // ============================================================
@@ -122,6 +124,23 @@ model ArtWorkAccess {
   artwork   ArtWork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
   grantedBy String?  // ID of the admin/client who granted this access
 
+  createdAt DateTime @default(now())
+
+  @@unique([userId, artworkId])
+  @@index([userId])
+  @@index([artworkId])
+}
+
+// ============================================================
+// SHORTLISTED ARTWORK
+// ============================================================
+
+model ShortlistedArtwork {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artworkId String
+  artwork   ArtWork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
   @@unique([userId, artworkId])

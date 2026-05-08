@@ -12,6 +12,7 @@ const representativeRoutes = require('./routes/representativeRoutes');
 const shareLinkRoutes = require('./routes/shareLinkRoutes');
 const searchRoutes = require('./routes/SearchRoutes');
 const favoriteRoutes = require('./routes/FavoriteRoutes');
+const shortlistRoutes = require('./routes/ShortlistRoutes');
 const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ app.use('/api/representatives', representativeRoutes);
 app.use('/api/share-links', shareLinkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/favorites', favoriteRoutes);
+app.use('/api/shortlists', shortlistRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
