@@ -65,6 +65,7 @@ model User {
   reviewedRequests       RepresentativeRequest[] @relation("ReviewedRequests")
   shareLinks             ArtworkShareLink[] @relation("CreatedShareLinks")
   receivedShareLinks     ArtworkShareLink[] @relation("SharedWithRecipients")
+  favoriteArtworks       FavoriteArtwork[]
 }
 
 // ============================================================
@@ -105,6 +106,7 @@ model ArtWork {
   userAccess ArtWorkAccess[]
   enquiries  Enquiry[]
   shareLinks ArtworkShareLink[]
+  favoritedBy FavoriteArtwork[]
 }
 
 // ============================================================
@@ -202,4 +204,21 @@ model ArtworkShareLink {
   
   // Many-to-many relation for recipients
   sharedWith  User[]    @relation("SharedWithRecipients")
+}
+
+// ============================================================
+// FAVORITE ARTWORK
+// ============================================================
+
+model FavoriteArtwork {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artworkId String
+  artwork   ArtWork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, artworkId])
+  @@index([userId])
+  @@index([artworkId])
 }

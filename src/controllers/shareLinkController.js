@@ -47,22 +47,20 @@ const createShareLink = async (req, res, next) => {
       }
     }
 
-    // 2.5. Validate Recipients (userIds) if provided
-    if (userIds) {
-      if (!Array.isArray(userIds)) {
-        res.status(400);
-        return next(new Error('userIds must be an array of user IDs.'));
-      }
+    // 2.5. Validate Recipients (userIds) - MANDATORY
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400);
+      return next(new Error('Please provide at least one recipient (userIds) for this share link.'));
+    }
 
-      const validUsers = await prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true },
-      });
+    const validUsers = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true },
+    });
 
-      if (validUsers.length !== userIds.length) {
-        res.status(400);
-        return next(new Error('One or more recipient user IDs are invalid.'));
-      }
+    if (validUsers.length !== userIds.length) {
+      res.status(400);
+      return next(new Error('One or more recipient user IDs are invalid.'));
     }
 
     // 3. Generate secure random token
@@ -160,7 +158,7 @@ const getSharedLinkArtworks = async (req, res, next) => {
 
     if (!isRecipient && !isCreator && !isAdmin) {
       res.status(403);
-      return next(new Error('You do not have permission to view this shared collection.'));
+      return next(new Error('You do not have permission to view this shared collection. It was not shared with your account.'));
     }
 
     // 4. Return artworks
