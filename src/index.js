@@ -10,6 +10,7 @@ const artWorkRoutes = require('./routes/ArtWorkRoutes');
 const enquiryRoutes = require('./routes/EnquiryRoutes');
 const representativeRoutes = require('./routes/representativeRoutes');
 const shareLinkRoutes = require('./routes/shareLinkRoutes');
+const searchRoutes = require('./routes/SearchRoutes');
 const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ app.use('/api/artworks', artWorkRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/representatives', representativeRoutes);
 app.use('/api/share-links', shareLinkRoutes);
+app.use('/api/search', searchRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {

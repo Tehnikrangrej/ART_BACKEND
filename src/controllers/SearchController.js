@@ -37,7 +37,20 @@ const searchArtWorks = asyncHandler(async (req, res) => {
     order = 'desc',
   } = req.query;
 
+  const { role, id: userId } = req.user;
   const AND = [];
+
+  // --- Role-Aware Filtering ---
+  // If CLIENT or REPRESENTATIVE, only show artworks they have access to
+  if (role === 'CLIENT' || role === 'CLIENT_REPRESENTATIVE') {
+    AND.push({
+      userAccess: {
+        some: {
+          userId: userId,
+        },
+      },
+    });
+  }
 
   // --- Text field filters (partial, case-insensitive) ---
   if (title)      AND.push({ title:      { contains: title,      mode: 'insensitive' } });
@@ -73,6 +86,11 @@ const searchArtWorks = asyncHandler(async (req, res) => {
   const artWorks = await prisma.artWork.findMany({
     where: AND.length > 0 ? { AND } : {},
     orderBy: { [sortField]: sortOrder },
+    include: {
+      userAccess: {
+        select: { userId: true }
+      }
+    }
   });
 
   res.json({
@@ -83,4 +101,42 @@ const searchArtWorks = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { searchArtWorks };
+// @desc    Find user by email (Global lookup)
+// @route   GET /api/search/users
+// @access  SUPERADMIN, ADMIN, CLIENT, CLIENT_REPRESENTATIVE
+const searchUsers = asyncHandler(async (req, res) => {
+  const { email } = req.query;
+
+  if (!email) {
+    res.status(400);
+    throw new Error('Please provide an email to search.');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: email.toLowerCase() },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isVerified: true,
+      parentId: true,
+      createdAt: true,
+    },
+  });
+
+  if (!user) {
+    return res.json({
+      success: true,
+      message: 'No user found with this email.',
+      data: null,
+    });
+  }
+
+  res.json({
+    success: true,
+    data: user,
+  });
+});
+
+module.exports = { searchArtWorks, searchUsers };
