@@ -97,6 +97,7 @@ model ArtWork {
   dimensions String?
   provenance String?
   location   String?
+  period     String?
   pictures   String[]
   price      Float
 
@@ -109,6 +110,25 @@ model ArtWork {
   shareLinks ArtworkShareLink[]
   favoritedBy FavoriteArtwork[]
   shortlistedBy ShortlistedArtwork[]
+
+  @@index([artist])
+  @@index([medium])
+  @@index([period])
+  @@index([location])
+  @@index([provenance])
+}
+
+model RelatedWorkSettings {
+  id             String   @id @default(uuid())
+
+  matchArtist    Boolean  @default(true)
+  matchMedium    Boolean  @default(true)
+  matchPeriod    Boolean  @default(false)
+  matchLocation  Boolean  @default(false)
+  matchProvenance Boolean @default(false)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 // ============================================================

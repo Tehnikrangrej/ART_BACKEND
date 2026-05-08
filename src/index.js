@@ -13,6 +13,7 @@ const shareLinkRoutes = require('./routes/shareLinkRoutes');
 const searchRoutes = require('./routes/SearchRoutes');
 const favoriteRoutes = require('./routes/FavoriteRoutes');
 const shortlistRoutes = require('./routes/ShortlistRoutes');
+const relatedArtWorkRoutes = require('./routes/RelatedArtWorkRoutes');
 const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ app.use('/api/share-links', shareLinkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/shortlists', shortlistRoutes);
+app.use('/api/artworks', relatedArtWorkRoutes); // This will handle /api/artworks/:id/related
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
