@@ -4,7 +4,7 @@ const crypto = require('crypto');
 /**
  * @desc    Create a new artwork share link
  * @route   POST /api/share-links
- * @access  Private (CLIENT only)
+ * @access  Private (CLIENT & CLIENT_REPRESENTATIVE)
  */
 const createShareLink = async (req, res, next) => {
   try {
@@ -21,28 +21,30 @@ const createShareLink = async (req, res, next) => {
       return next(new Error('Please provide a valid expiry time in hours.'));
     }
 
-    // 2. Verify CLIENT access to ALL requested artworks
-    // ONLY CLIENT can generate share links, and only for artworks they have access to.
-    const userId = req.user.id;
+    // 2. Verify User access to ALL requested artworks
+    const { role: userRole, id: userId } = req.user;
 
-    const userAccess = await prisma.artWorkAccess.findMany({
-      where: {
-        userId,
-        artworkId: { in: artworkIds },
-      },
-      select: { artworkId: true },
-    });
+    // SUPERADMIN and ADMIN can share any artwork
+    if (userRole !== 'SUPERADMIN' && userRole !== 'ADMIN') {
+      const userAccess = await prisma.artWorkAccess.findMany({
+        where: {
+          userId,
+          artworkId: { in: artworkIds },
+        },
+        select: { artworkId: true },
+      });
 
-    const accessedIds = userAccess.map((access) => access.artworkId);
-    const unauthorizedIds = artworkIds.filter((id) => !accessedIds.includes(id));
+      const accessedIds = userAccess.map((access) => access.artworkId);
+      const unauthorizedIds = artworkIds.filter((id) => !accessedIds.includes(id));
 
-    if (unauthorizedIds.length > 0) {
-      res.status(403);
-      return next(
-        new Error(
-          `Unauthorized access. You do not have permission to share these artworks: ${unauthorizedIds.join(', ')}`
-        )
-      );
+      if (unauthorizedIds.length > 0) {
+        res.status(403);
+        return next(
+          new Error(
+            `Unauthorized access. You do not have permission to share these artworks: ${unauthorizedIds.join(', ')}`
+          )
+        );
+      }
     }
 
     // 2.5. Validate Recipients (userIds) if provided
@@ -151,11 +153,12 @@ const getSharedLinkArtworks = async (req, res, next) => {
     }
 
     // 3. Authorization Check
-    const userId = req.user.id;
+    const { role: userRole, id: userId } = req.user;
     const isRecipient = shareLink.sharedWith.some((u) => u.id === userId);
     const isCreator = shareLink.createdById === userId;
+    const isAdmin = userRole === 'SUPERADMIN' || userRole === 'ADMIN';
 
-    if (!isRecipient && !isCreator) {
+    if (!isRecipient && !isCreator && !isAdmin) {
       res.status(403);
       return next(new Error('You do not have permission to view this shared collection.'));
     }

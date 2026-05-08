@@ -9,13 +9,13 @@ const { authorizeRoles } = require('../middlewares/roleMiddleware');
 
 /**
  * @route   POST /api/share-links
- * @desc    Create a new share link (CLIENT only)
+ * @desc    Create a new share link (ALL Roles)
  * @access  Private
  */
 router.post(
   '/',
   protect,
-  authorizeRoles('CLIENT'),
+  authorizeRoles('SUPERADMIN', 'ADMIN', 'CLIENT', 'CLIENT_REPRESENTATIVE'),
   createShareLink
 );
 
