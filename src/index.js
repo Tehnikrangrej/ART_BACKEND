@@ -56,9 +56,11 @@ app.get('/', (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-// ─── Start Server ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server running at: http://localhost:${PORT}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running at: http://localhost:${PORT}`);
-});
+module.exports = app;
