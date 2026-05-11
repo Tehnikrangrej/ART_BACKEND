@@ -27,16 +27,16 @@ const filterArtworkFields = async (artworks, role) => {
     // Clone to avoid mutating original if it's cached or used elsewhere
     const filtered = { ...artwork };
 
-    if (!settings.showTitle) delete filtered.title;
-    if (!settings.showArtist) delete filtered.artist;
-    if (!settings.showYear) delete filtered.year;
-    if (!settings.showMedium) delete filtered.medium;
-    if (!settings.showDimensions) delete filtered.dimensions;
-    if (!settings.showProvenance) delete filtered.provenance;
-    if (!settings.showLocation) delete filtered.location;
-    if (!settings.showPeriod) delete filtered.period;
-    if (!settings.showPrice) delete filtered.price;
-    if (!settings.showPictures) delete filtered.pictures;
+    if (!settings.showTitle) filtered.title = "Disable";
+    if (!settings.showArtist) filtered.artist = "Disable";
+    if (!settings.showYear) filtered.year = "Disable";
+    if (!settings.showMedium) filtered.medium = "Disable";
+    if (!settings.showDimensions) filtered.dimensions = "Disable";
+    if (!settings.showProvenance) filtered.provenance = "Disable";
+    if (!settings.showLocation) filtered.location = "Disable";
+    if (!settings.showPeriod) filtered.period = "Disable";
+    if (!settings.showPrice) filtered.price = "Disable";
+    if (!settings.showPictures) filtered.pictures = ["Disable"];
 
     return filtered;
   });
