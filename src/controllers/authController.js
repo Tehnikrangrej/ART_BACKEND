@@ -97,6 +97,9 @@ const registerUser = asyncHandler(async (req, res) => {
     },
   });
 
+  // Attach to req for Audit Logging
+  req.user = user;
+
   // ── Skip OTP if 2FA disabled
   if (!use2FA) {
     return res.status(201).json({
@@ -152,6 +155,9 @@ const loginUser = asyncHandler(async (req, res) => {
     res.status(401);
     throw new Error('Invalid email or password.');
   }
+
+  // Attach to req for Audit Logging
+  req.user = user;
 
   if (!user.isVerified) {
     res.status(401);
@@ -212,6 +218,9 @@ const verifyOTP = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('No account found with this email.');
   }
+
+  // Attach to req for Audit Logging
+  req.user = user;
 
   const validOtp = await prisma.oTP.findFirst({
     where: {

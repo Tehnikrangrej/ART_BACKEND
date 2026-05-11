@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const prisma = require('../prismaClient');
+const logAudit = require('./auditLogger');
 
 /**
  * @desc Initialize background jobs for data cleanup
@@ -21,6 +22,10 @@ const initCronJobs = () => {
 
       if (result.count > 0) {
         console.log(`[Cleanup Success] Deleted ${result.count} expired share links.`);
+        await logAudit({
+          action: 'CRON_CLEANUP_EXPIRED_LINKS',
+          payload: { deletedCount: result.count },
+        });
       } else {
         console.log('[Cleanup] No expired links found.');
       }

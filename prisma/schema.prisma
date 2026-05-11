@@ -278,3 +278,23 @@ model FavoriteArtwork {
   @@index([userId])
   @@index([artworkId])
 }
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  userEmail  String?
+  action     String
+  method     String
+  endpoint   String
+  payload    Json?
+  ipAddress  String?
+  statusCode Int?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
