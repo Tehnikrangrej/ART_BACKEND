@@ -43,10 +43,12 @@ const createArtWork = asyncHandler(async (req, res) => {
     },
   });
 
+  const filteredArtwork = await filterArtworkFields(artwork, req.user.role);
+
   res.status(201).json({
     success: true,
     message: 'Artwork created successfully.',
-    data: artwork,
+    data: filteredArtwork,
   });
 });
 
@@ -177,10 +179,12 @@ const updateArtWork = asyncHandler(async (req, res) => {
     },
   });
 
+  const filteredArtwork = await filterArtworkFields(updated, req.user.role);
+
   res.json({
     success: true,
     message: 'Artwork updated successfully.',
-    data: updated,
+    data: filteredArtwork,
   });
 });
 

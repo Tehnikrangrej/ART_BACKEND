@@ -9,10 +9,6 @@ const prisma = require('../prismaClient');
 const filterArtworkFields = async (artworks, role) => {
   if (!artworks) return artworks;
 
-  // Admins and Superadmins always see all fields
-  if (role === 'SUPERADMIN' || role === 'ADMIN') {
-    return artworks;
-  }
 
   // Fetch settings (using id "global-visibility")
   let settings = await prisma.artworkVisibilitySettings.findUnique({
