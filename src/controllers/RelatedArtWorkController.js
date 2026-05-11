@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const { asyncHandler } = require('../middlewares/errorMiddleware');
+const { filterArtworkFields } = require('../utils/artworkFilter');
 
 // @desc    Get related artworks based on admin-configured settings
 // @route   GET /api/artworks/:id/related
@@ -106,9 +107,11 @@ const getRelatedArtWorks = asyncHandler(async (req, res) => {
     orderBy: { createdAt: 'desc' },
   });
 
+  const filteredRelatedArtworks = await filterArtworkFields(relatedArtworks, role);
+
   res.json({
     success: true,
-    count: relatedArtworks.length,
+    count: filteredRelatedArtworks.length,
     settingsUsed: {
       matchArtist: settings.matchArtist,
       matchMedium: settings.matchMedium,
@@ -116,7 +119,7 @@ const getRelatedArtWorks = asyncHandler(async (req, res) => {
       matchLocation: settings.matchLocation,
       matchProvenance: settings.matchProvenance,
     },
-    data: relatedArtworks,
+    data: filteredRelatedArtworks,
   });
 });
 

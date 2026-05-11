@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { asyncHandler } = require('../middlewares/errorMiddleware');
 const { getPagination } = require('../utils/pagination');
+const { filterArtworkFields } = require('../utils/artworkFilter');
 
 // @desc    Search and filter artworks via query params (schema fields only)
 // @route   GET /api/search
@@ -104,13 +105,15 @@ const searchArtWorks = asyncHandler(async (req, res) => {
     }),
   ]);
 
+  const filteredArtWorks = await filterArtworkFields(artWorks, role);
+
   res.json({
     success: true,
     total,
     page,
     pages: Math.ceil(total / limit),
     appliedFilters: req.query,
-    data: artWorks,
+    data: filteredArtWorks,
   });
 });
 

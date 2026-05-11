@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination } = require('../utils/pagination');
+const { filterArtworkFields } = require('../utils/artworkFilter');
 
 // @desc    Add artwork to shortlist
 // @route   POST /api/shortlists/:artworkId
@@ -121,12 +122,15 @@ const getShortlistedArtworks = asyncHandler(async (req, res) => {
     prisma.shortlistedArtwork.count({ where: { userId } }),
   ]);
 
+  const artworks = shortlists.map((s) => s.artwork);
+  const filteredArtworks = await filterArtworkFields(artworks, req.user.role);
+
   res.json({
     success: true,
     total,
     page,
     pages: Math.ceil(total / limit),
-    data: shortlists.map((s) => s.artwork),
+    data: filteredArtworks,
   });
 });
 

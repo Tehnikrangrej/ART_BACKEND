@@ -14,6 +14,7 @@ const searchRoutes = require('./routes/SearchRoutes');
 const favoriteRoutes = require('./routes/FavoriteRoutes');
 const shortlistRoutes = require('./routes/ShortlistRoutes');
 const relatedArtWorkRoutes = require('./routes/RelatedArtWorkRoutes');
+const artworkVisibilityRoutes = require('./routes/ArtworkVisibilityRoutes');
 const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/shortlists', shortlistRoutes);
 app.use('/api/artworks', relatedArtWorkRoutes); // This will handle /api/artworks/:id/related
+app.use('/api/artworks', artworkVisibilityRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {

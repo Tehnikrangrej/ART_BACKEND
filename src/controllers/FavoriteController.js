@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination } = require('../utils/pagination');
+const { filterArtworkFields } = require('../utils/artworkFilter');
 
 // @desc    Add artwork to favorites
 // @route   POST /api/favorites/:artworkId
@@ -121,12 +122,15 @@ const getFavorites = asyncHandler(async (req, res) => {
     prisma.favoriteArtwork.count({ where: { userId } }),
   ]);
 
+  const artworks = favorites.map((f) => f.artwork);
+  const filteredArtworks = await filterArtworkFields(artworks, req.user.role);
+
   res.json({
     success: true,
     total,
     page,
     pages: Math.ceil(total / limit),
-    data: favorites.map((f) => f.artwork),
+    data: filteredArtworks,
   });
 });
 

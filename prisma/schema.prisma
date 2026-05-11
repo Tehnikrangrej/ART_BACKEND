@@ -131,6 +131,23 @@ model RelatedWorkSettings {
   updatedAt      DateTime @updatedAt
 }
 
+model ArtworkVisibilitySettings {
+  id             String   @id @default("global-visibility")
+
+  showTitle      Boolean  @default(true)
+  showArtist     Boolean  @default(true)
+  showYear       Boolean  @default(true)
+  showMedium     Boolean  @default(true)
+  showDimensions Boolean  @default(true)
+  showProvenance Boolean  @default(true)
+  showLocation   Boolean  @default(true)
+  showPeriod     Boolean  @default(true)
+  showPrice      Boolean  @default(true)
+  showPictures   Boolean  @default(true)
+
+  updatedAt      DateTime @updatedAt
+}
+
 // ============================================================
 // ARTWORK ACCESS  (many-to-many: User ↔ ArtWork)
 // Records which user has access to which artwork, and who granted it.

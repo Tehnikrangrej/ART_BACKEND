@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination } = require('../utils/pagination');
+const { filterArtworkFields } = require('../utils/artworkFilter');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,12 +91,14 @@ const getAllArtWorks = asyncHandler(async (req, res) => {
     prisma.artWork.count({ where }),
   ]);
 
+  const filteredArtworks = await filterArtworkFields(artworks, role);
+
   res.json({
     success: true,
     total,
     page,
     pages: Math.ceil(total / limit),
-    data: artworks,
+    data: filteredArtworks,
   });
 });
 
@@ -123,22 +126,22 @@ const getArtWorkById = asyncHandler(async (req, res) => {
 
   const { role, id: userId } = req.user;
 
-  // SUPERADMIN and ADMIN see all
-  if (role === 'SUPERADMIN' || role === 'ADMIN') {
-    return res.json({ success: true, data: artwork });
+  // 1. Verify access for CLIENT / CLIENT_REPRESENTATIVE
+  if (role !== 'SUPERADMIN' && role !== 'ADMIN') {
+    const access = await prisma.artWorkAccess.findUnique({
+      where: { userId_artworkId: { userId, artworkId: req.params.id } },
+    });
+
+    if (!access) {
+      res.status(403);
+      throw new Error('You Do not Have access to This Artwork');
+    }
   }
 
-  // CLIENT / CLIENT_REPRESENTATIVE — verify access
-  const access = await prisma.artWorkAccess.findUnique({
-    where: { userId_artworkId: { userId, artworkId: req.params.id } },
-  });
+  // 2. Filter fields based on global settings
+  const filteredArtwork = await filterArtworkFields(artwork, role);
 
-  if (!access) {
-    res.status(403);
-    throw new Error('You Do not Have access to This Artwork');
-  }
-
-  res.json({ success: true, data: artwork });
+  res.json({ success: true, data: filteredArtwork });
 });
 
 // @desc    Update an artwork
