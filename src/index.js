@@ -16,6 +16,9 @@ const shortlistRoutes = require('./routes/ShortlistRoutes');
 const relatedArtWorkRoutes = require('./routes/RelatedArtWorkRoutes');
 const artworkVisibilityRoutes = require('./routes/ArtworkVisibilityRoutes');
 const auditLogRoutes = require('./routes/AuditLogRoutes');
+const loanRoutes = require('./routes/LoanRoutes');
+const resourceRoutes = require('./routes/ResourceRoutes');
+const collectionRoutes = require('./routes/CollectionRoutes');
 const initCronJobs = require('./utils/cronJobs');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -41,6 +44,9 @@ app.use('/api/artworks', artworkVisibilityRoutes);
 app.use('/api/artworks', relatedArtWorkRoutes);
 app.use('/api/artworks', artWorkRoutes);
 app.use('/api/admin/audit-logs', auditLogRoutes);
+app.use('/api/loans', loanRoutes);
+app.use('/api/external-resources', resourceRoutes);
+app.use('/api/collections', collectionRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/representatives', representativeRoutes);
 app.use('/api/share-links', shareLinkRoutes);
