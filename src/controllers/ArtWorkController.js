@@ -6,6 +6,7 @@ const { filterArtworkFields } = require('../utils/artworkFilter');
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const parsePictures = (pictureUrls) => {
+
   if (!pictureUrls) return [];
   const urls = Array.isArray(pictureUrls) ? pictureUrls : [pictureUrls];
   return urls.map((u) => u.trim()).filter(Boolean);
