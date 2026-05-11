@@ -32,6 +32,8 @@ initCronJobs();
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/artworks', artworkVisibilityRoutes);
+app.use('/api/artworks', relatedArtWorkRoutes);
 app.use('/api/artworks', artWorkRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/representatives', representativeRoutes);
@@ -39,8 +41,7 @@ app.use('/api/share-links', shareLinkRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/shortlists', shortlistRoutes);
-app.use('/api/artworks', relatedArtWorkRoutes); // This will handle /api/artworks/:id/related
-app.use('/api/artworks', artworkVisibilityRoutes);
+
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
