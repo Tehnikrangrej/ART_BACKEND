@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
+const { getPagination } = require('../utils/pagination');
 
 // @desc    Add artwork to favorites
 // @route   POST /api/favorites/:artworkId
@@ -103,20 +104,28 @@ const removeFavorite = asyncHandler(async (req, res) => {
 // @access  Private (CLIENT, CLIENT_REPRESENTATIVE)
 const getFavorites = asyncHandler(async (req, res) => {
   const userId = req.user.id;
+  const { page, limit, skip } = getPagination(req.query);
 
-  const favorites = await prisma.favoriteArtwork.findMany({
-    where: { userId },
-    include: {
-      artwork: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const [favorites, total] = await Promise.all([
+    prisma.favoriteArtwork.findMany({
+      where: { userId },
+      include: {
+        artwork: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.favoriteArtwork.count({ where: { userId } }),
+  ]);
 
   res.json({
     success: true,
-    count: favorites.length,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
     data: favorites.map((f) => f.artwork),
   });
 });

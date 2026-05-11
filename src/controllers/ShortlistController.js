@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
+const { getPagination } = require('../utils/pagination');
 
 // @desc    Add artwork to shortlist
 // @route   POST /api/shortlists/:artworkId
@@ -103,20 +104,28 @@ const removeFromShortlist = asyncHandler(async (req, res) => {
 // @access  Private (CLIENT, CLIENT_REPRESENTATIVE)
 const getShortlistedArtworks = asyncHandler(async (req, res) => {
   const userId = req.user.id;
+  const { page, limit, skip } = getPagination(req.query);
 
-  const shortlists = await prisma.shortlistedArtwork.findMany({
-    where: { userId },
-    include: {
-      artwork: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const [shortlists, total] = await Promise.all([
+    prisma.shortlistedArtwork.findMany({
+      where: { userId },
+      include: {
+        artwork: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.shortlistedArtwork.count({ where: { userId } }),
+  ]);
 
   res.json({
     success: true,
-    count: shortlists.length,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
     data: shortlists.map((s) => s.artwork),
   });
 });

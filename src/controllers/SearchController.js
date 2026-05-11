@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const { asyncHandler } = require('../middlewares/errorMiddleware');
+const { getPagination } = require('../utils/pagination');
 
 // @desc    Search and filter artworks via query params (schema fields only)
 // @route   GET /api/search
@@ -83,19 +84,31 @@ const searchArtWorks = asyncHandler(async (req, res) => {
   const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
   const sortOrder = order === 'asc' ? 'asc' : 'desc';
 
-  const artWorks = await prisma.artWork.findMany({
-    where: AND.length > 0 ? { AND } : {},
-    orderBy: { [sortField]: sortOrder },
-    include: {
-      userAccess: {
-        select: { userId: true }
-      }
-    }
-  });
+  // --- Pagination ---
+  const { page, limit, skip } = getPagination(req.query);
+
+  const [artWorks, total] = await Promise.all([
+    prisma.artWork.findMany({
+      where: AND.length > 0 ? { AND } : {},
+      orderBy: { [sortField]: sortOrder },
+      include: {
+        userAccess: {
+          select: { userId: true }
+        }
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.artWork.count({
+      where: AND.length > 0 ? { AND } : {},
+    }),
+  ]);
 
   res.json({
     success: true,
-    count: artWorks.length,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
     appliedFilters: req.query,
     data: artWorks,
   });

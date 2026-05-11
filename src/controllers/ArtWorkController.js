@@ -1,5 +1,6 @@
 const prisma = require('../prismaClient');
 const asyncHandler = require('../utils/asyncHandler');
+const { getPagination } = require('../utils/pagination');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -9,13 +10,6 @@ const parsePictures = (pictureUrls) => {
   return urls.map((u) => u.trim()).filter(Boolean);
 };
 
-// Paginate helper
-const getPagination = (query) => {
-  const page = Math.max(1, parseInt(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit) || 20));
-  const skip = (page - 1) * limit;
-  return { page, limit, skip };
-};
 
 // ─── ADMIN / SUPERADMIN ───────────────────────────────────────────────────────
 

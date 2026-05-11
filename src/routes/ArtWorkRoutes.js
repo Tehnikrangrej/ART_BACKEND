@@ -9,7 +9,6 @@ const {
   deleteArtWork,
   assignArtworkToClient,
   revokeArtworkFromClient,
-  getMyArtworks,
   assignArtworkToRepresentative,
   revokeArtworkFromRepresentative,
 } = require('../controllers/ArtWorkController');
