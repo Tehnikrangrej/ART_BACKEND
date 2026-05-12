@@ -85,6 +85,13 @@ const getAllArtWorks = asyncHandler(async (req, res) => {
               select: { id: true, name: true, email: true, role: true }
             }
           }
+        },
+        loans: {
+          where: { status: { in: ['ON_LOAN', 'OVERDUE'] } },
+          take: 1
+        },
+        externalResources: {
+          where: { isActive: true }
         }
       },
       orderBy: { createdAt: 'desc' },
@@ -118,6 +125,13 @@ const getArtWorkById = asyncHandler(async (req, res) => {
             select: { id: true, name: true, email: true, role: true }
           }
         }
+      },
+      loans: {
+        where: { status: { in: ['ON_LOAN', 'OVERDUE'] } },
+        take: 1
+      },
+      externalResources: {
+        where: { isActive: true }
       }
     }
   });

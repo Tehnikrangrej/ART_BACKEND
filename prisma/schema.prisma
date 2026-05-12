@@ -34,6 +34,21 @@ enum RepresentativeRequestStatus {
   REJECTED
 }
 
+enum LoanStatus {
+  ON_LOAN
+  RETURNED
+  OVERDUE
+}
+
+enum ResourceType {
+  ARTICLE
+  AUCTION
+  ANALYTICS
+  VIDEO
+  IFRAME
+  WIDGET
+}
+
 // ============================================================
 // USER  (single table, self-relation for CLIENT → REPRESENTATIVE)
 // ============================================================
@@ -67,6 +82,8 @@ model User {
   receivedShareLinks     ArtworkShareLink[] @relation("SharedWithRecipients")
   favoriteArtworks       FavoriteArtwork[]
   shortlistedArtworks    ShortlistedArtwork[]
+  createdCollections     Collection[]         @relation("CreatedCollections")
+  createdResources       ExternalResource[]   @relation("CreatedResources")
 }
 
 // ============================================================
@@ -110,6 +127,9 @@ model ArtWork {
   shareLinks ArtworkShareLink[]
   favoritedBy FavoriteArtwork[]
   shortlistedBy ShortlistedArtwork[]
+  loans       ArtworkLoan[]
+  externalResources ExternalResource[]
+  collections   Collection[]
 
   @@index([artist])
   @@index([medium])
@@ -277,4 +297,102 @@ model FavoriteArtwork {
   @@unique([userId, artworkId])
   @@index([userId])
   @@index([artworkId])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  userEmail  String?
+  action     String
+  method     String
+  endpoint   String
+  payload    Json?
+  ipAddress  String?
+  statusCode Int?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// ARTWORK LOAN (External Display)
+// ============================================================
+
+model ArtworkLoan {
+  id              String     @id @default(uuid())
+  artworkId       String
+  artwork         ArtWork    @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  
+  borrowerName    String
+  borrowerContact String?
+  location        String     // Where it is displayed externally
+  
+  loanDate        DateTime   @default(now())
+  dueDate         DateTime
+  returnDate      DateTime?  // Actual return date
+  
+  status          LoanStatus @default(ON_LOAN)
+  notes           String?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([artworkId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ============================================================
+// COLLECTION
+// ============================================================
+
+model Collection {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  
+  createdById String
+  createdBy   User     @relation("CreatedCollections", fields: [createdById], references: [id])
+  
+  artworks    ArtWork[]
+  resources   ExternalResource[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// EXTERNAL MARKET RESOURCE
+// ============================================================
+
+model ExternalResource {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  url          String
+  type         ResourceType
+  thumbnail    String?
+  
+  isActive     Boolean      @default(true)
+  
+  artworkId    String?
+  artwork      ArtWork?     @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  
+  collectionId String?
+  collection   Collection?  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  
+  createdById  String
+  createdBy    User         @relation("CreatedResources", fields: [createdById], references: [id])
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([artworkId])
+  @@index([collectionId])
+  @@index([type])
 }

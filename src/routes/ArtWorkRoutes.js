@@ -13,6 +13,7 @@ const {
   revokeArtworkFromRepresentative,
 } = require('../controllers/ArtWorkController');
 
+const { getArtworkResources } = require('../controllers/ResourceController');
 const { protect } = require('../middlewares/authMiddleware');
 const { authorizeRoles, requireVerified } = require('../middlewares/roleMiddleware');
 
