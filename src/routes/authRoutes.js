@@ -10,6 +10,7 @@ const {
   getMe,
   getAllUsers,
   createAdmin,
+  updateUser,
 } = require('../controllers/authController');
 
 const { protect } = require('../middlewares/authMiddleware');
@@ -37,6 +38,12 @@ router.get('/users',
   protect,
   authorizeRoles('SUPERADMIN', 'ADMIN'),
   getAllUsers
+);
+
+router.put('/users/:id',
+  protect,
+  authorizeRoles('SUPERADMIN'),
+  updateUser
 );
 
 module.exports = router;

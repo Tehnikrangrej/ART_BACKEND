@@ -456,6 +456,64 @@ const createAdmin = asyncHandler(async (req, res) => {
   });
 });
 
+// ─── Update User (SUPERADMIN only) ───────────────────────────────────────────
+// @route   PUT /api/auth/users/:id
+// @access  SUPERADMIN
+const updateUser = asyncHandler(async (req, res) => {
+  const { name, email, password, role, isVerified, twoFactorAuth } = req.body;
+  const userId = req.params.id;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found.');
+  }
+
+  const updateData = {};
+
+  if (name) updateData.name = name;
+  if (email) {
+    if (!EMAIL_REGEX.test(email)) {
+      res.status(400);
+      throw new Error('Invalid email format.');
+    }
+    const emailExists = await prisma.user.findUnique({ where: { email } });
+    if (emailExists && emailExists.id !== userId) {
+      res.status(400);
+      throw new Error('Email is already in use by another account.');
+    }
+    updateData.email = email;
+  }
+  if (password) {
+    if (password.length < 8) {
+      res.status(400);
+      throw new Error('Password must be at least 8 characters long.');
+    }
+    updateData.password = await bcrypt.hash(password, 10);
+  }
+  if (role) {
+    const validRoles = ['SUPERADMIN', 'ADMIN', 'CLIENT', 'CLIENT_REPRESENTATIVE'];
+    if (!validRoles.includes(role)) {
+      res.status(400);
+      throw new Error('Invalid role specified.');
+    }
+    updateData.role = role;
+  }
+  if (typeof isVerified === 'boolean') updateData.isVerified = isVerified;
+  if (typeof twoFactorAuth === 'boolean') updateData.twoFactorAuth = twoFactorAuth;
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: updateData,
+  });
+
+  res.json({
+    success: true,
+    message: 'User updated successfully.',
+    data: safeUser(updatedUser),
+  });
+});
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = {
   registerUser,
@@ -466,4 +524,5 @@ module.exports = {
   getMe,
   getAllUsers,
   createAdmin,
+  updateUser,
 };
